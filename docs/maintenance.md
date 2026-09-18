@@ -44,7 +44,9 @@ Baseline: upstream commit `0982c71cb196611da3dd01cad43950469106b2bf`.
 ## Regression evidence
 
 Verified on 2026-09-19 using macOS Apple Silicon, Python 3.12 and MCP SDK 1.30.0.
-The real MCP stdio smoke exercised all three tools and the API-error path:
+All 37 automated tests and `ruff check .` passed locally. GitHub Actions is enabled
+for ongoing pull-request checks. The real MCP stdio smoke exercised all three
+tools and the API-error path:
 
 | Condition/result | Value |
 | --- | --- |
