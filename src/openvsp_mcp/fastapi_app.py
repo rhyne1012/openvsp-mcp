@@ -17,7 +17,7 @@ from .models import (
 def create_app() -> FastAPI:
     app = FastAPI(
         title="OpenVSP MCP Service",
-        version="0.2.0",
+        version="0.3.0",
         description="Inspect and automate OpenVSP geometry edits, with optional VSPAero runs.",
     )
 
@@ -51,4 +51,4 @@ def create_app() -> FastAPI:
 
 app = create_app()
 
-__all__ = ["create_app", "app"]
+__all__ = ["app", "create_app"]

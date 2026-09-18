@@ -1,175 +1,181 @@
-# openvsp-mcp - Parametric geometry for MCP workflows
+# openvsp-mcp — OpenVSP and VSPAERO through MCP
 
-<p align="center">
-  <a href="LICENSE"><img src="https://img.shields.io/badge/license-MIT-blue.svg" alt="License: MIT"></a>
-  <a href="pyproject.toml"><img src="https://img.shields.io/badge/python-3.10%2B-3776AB.svg" alt="Python 3.10 or newer"></a>
-  <a href="https://github.com/Three-Little-Birds/openvsp-mcp/actions/workflows/ci.yml"><img src="https://github.com/Three-Little-Birds/openvsp-mcp/actions/workflows/ci.yml/badge.svg" alt="CI status"></a>
-  <img src="https://img.shields.io/badge/MCP-tooling-blueviolet.svg" alt="MCP tooling badge">
-</p>
+A maintained fork of [Three-Little-Birds/openvsp-mcp](https://github.com/Three-Little-Birds/openvsp-mcp).
+Use it to inspect a model, apply AngelScript geometry edits, and run a single steady
+subsonic VSPAERO condition. The original MIT license and history are retained.
 
-> **TL;DR**: Automate [OpenVSP](https://openvsp.org/) geometry edits and VSPAero runs so agents can generate meshes, scripts, and aerodynamic coefficients without manual GUI steps.
+The first maintenance release is **0.3.0**. See [migration notes](docs/maintenance.md)
+for behavior changes and [the aircraft regression](examples/simple_aircraft/run_smoke.py)
+for a complete, executable example.
 
-## Table of contents
+## Install
 
-1. [What it provides](#what-it-provides)
-2. [Quickstart](#quickstart)
-3. [Run as a service](#run-as-a-service)
-4. [Agent playbook](#agent-playbook)
-5. [Stretch ideas](#stretch-ideas)
-6. [Accessibility & upkeep](#accessibility--upkeep)
-7. [Contributing](#contributing)
+Python 3.10+ and a separate OpenVSP installation are required. The real integration
+case was verified on macOS Apple Silicon with **OpenVSP 3.51.3 / VSPAERO 7.2.2**.
+Other OpenVSP releases and platforms have not been integration-tested by this fork.
+The new pipeline uses the VSPAERO 7 thick/thin geometry-set interface; older releases
+are not claimed to be compatible. OpenVSP/VSPAERO binaries are not included.
 
-## What it provides
+```sh
+git clone https://github.com/rhyne1012/openvsp-mcp.git
+cd openvsp-mcp
+# While the first maintenance PR is under review:
+git checkout fix/reliable-vspaero
+python3 -m venv .venv
+source .venv/bin/activate
+python -m pip install -e '.[dev]'
 
-| Scenario | Value |
-|----------|-------|
-| OpenVSP scripting | Automate [OpenVSP](https://openvsp.org/) commands (set parameters, duplicate geometries, export meshes) without opening the GUI. |
-| VSPAero batch runs | Launch [VSPAero](https://vspu.larc.nasa.gov/) cases and capture generated metrics/CSV files for downstream optimisation. |
-| MCP transport | Publish the same functionality over STDIO or HTTP via the Model Context Protocol so ToolHive or other clients can drive geometry studies remotely. |
-
-## Quickstart
-
-### 1. Install the package
-
-```bash
-uv pip install "git+https://github.com/Three-Little-Birds/openvsp-mcp.git"
+# Example paths for the macOS application bundle; adjust for your installation.
+export OPENVSP_BIN=/Applications/OpenVSP.app/Contents/Resources/vspscript
+export VSPAERO_BIN=/Applications/OpenVSP.app/Contents/Resources/vspaero
+python -m openvsp_mcp --describe
 ```
 
-Install the official binaries from the [OpenVSP download page](https://openvsp.org/download.php) (this wrapper was tested with OpenVSP/VSPAero 3.46.0 on macOS). Verify they are in your `PATH`:
+`OPENVSP_BIN` should identify `vspscript`, or a `vsp` executable that accepts
+`-script`. `VSPAERO_BIN` identifies the solver installation; OpenVSP invokes it
+through its Analysis API. It is not called with a `.vsp3` filename as solver input.
+The MCP SDK is constrained to `>=1.20,<2` to retain the FastMCP 1.x interface.
 
-```bash
-export OPENVSP_BIN=/Applications/OpenVSP/vsp
-export VSPAERO_BIN=/Applications/OpenVSP/vspaero
+## MCP tools
+
+Start the server with `openvsp-mcp` or `python -m openvsp_mcp` (stdio by default).
+Configure the client with the absolute path to that executable and the binary
+paths above. Each tool accepts a nested `request` object.
+
+| Tool | Behavior |
+| --- | --- |
+| `openvsp.inspect` | Reads `.vsp3` XML metadata without starting OpenVSP or saving the file. |
+| `openvsp.modify` | Applies commands, validates the generated model, then replaces the input file. |
+| `openvsp.run_vspaero` | Applies commands to a copy, prepares aerodynamic geometry, solves, and validates results. Leaves the input file unchanged. |
+
+Example inspection arguments:
+
+```json
+{"request": {"geometry_file": "/absolute/path/aircraft.vsp3"}}
 ```
 
-> **Tip (macOS/Linux):** if you prefer to avoid GUI installers, build the repo's ToolHive image and run the examples inside Docker:
-> ```bash
-> docker build -t openvsp-mcp-toolhive -f infra/docker/openvsp_toolhive/Dockerfile .
-> docker run --rm --entrypoint /usr/local/bin/vsp openvsp-mcp-toolhive --version
-> ```
-> Mount your geometry directory and set `OPENVSP_BIN=/usr/local/bin/vsp` when executing the Python snippets in-container.
+Example solve arguments for the bundled four-component aircraft regression:
 
-### 2. Run a scripted geometry edit
+```json
+{
+  "request": {
+    "geometry_file": "/absolute/path/simple_aircraft.vsp3",
+    "case_name": "single_point",
+    "output_dir": "/absolute/path/runs",
+    "timeout_seconds": 600,
+    "analysis": {
+      "thick_geom_set": 3,
+      "thin_geom_set": 4,
+      "mach": 0.1,
+      "alpha": 3.0,
+      "beta": 0.0,
+      "sref": 12.0,
+      "bref": 10.0,
+      "cref": 1.2444444444,
+      "xcg": 3.0,
+      "vinf": 34.03,
+      "rho": 1.225,
+      "reynolds": 2900000.0
+    }
+  }
+}
+```
+
+Set 3 contains the fuselage and set 4 contains the three lifting surfaces **in this
+example only**. Supply sets and reference dimensions appropriate to your own model.
+Defaults are all geometry as thin surfaces, no thick surfaces, unit reference
+area/span/chord, Mach 0.1 and alpha 3 degrees. Angles are in degrees. Geometry,
+reference dimensions, speed and density must use consistent units. Mach, speed,
+density and Reynolds number are independent inputs; the wrapper does not derive
+atmospheric consistency for you. This version runs exactly one flight condition.
+
+To edit a model, use `set_commands`, for example:
+
+```json
+{
+  "request": {
+    "geometry_file": "/absolute/path/aircraft.vsp3",
+    "set_commands": [
+      {"command": "SetGeomName(FindGeom(\"Main_Wing\",0),\"Renamed_Wing\")"}
+    ]
+  }
+}
+```
+
+`set_commands` contains trusted AngelScript with the server process's privileges.
+Use the server locally with trusted clients. Inspection reports XML metadata; it
+does not certify geometric validity or solver compatibility.
+
+## Results and failures
+
+Each modify/solve gets a new directory under `output_dir`, or `openvsp_runs` beside
+the source model. It contains an input snapshot, `automation.vspscript`, the output
+model, `openvsp.log`, and `manifest.json`. Solver runs also retain `solver.log`,
+`.vspgeom`, `.vspaero`, `.adb`, `.history`, `.polar`, and `history.csv`.
+Files are retained on success and failure; remove old run directories when no
+longer needed. Archived scripts read their own input snapshot. Re-running one can
+overwrite artifacts in that archived run, so copy the run first if preserving it.
+
+The response preserves `script_path` and `result_path` and adds `geometry_path`,
+`run_directory`, `log_path`, `manifest_path`, `artifacts`, `coefficients`, and
+`analysis_inputs`. All returned paths are absolute and exist on successful return.
+`analysis_inputs` records the explicitly applied settings; `openvsp.log` includes
+OpenVSP's analysis-input dump. Flight conditions are checked against the polar.
+
+Success requires zero exit status, a unique script completion marker, a nonempty
+model, fresh nonempty solver artifacts, and a finite single-row polar matching
+Mach, alpha, beta, and Reynolds number. API errors cause an explicit failure.
+A failure returns the run directory and log path. POSIX timeouts terminate the
+process group, including the solver. Windows child-process cleanup has not been
+integration-verified.
+
+## Verification
+
+```sh
+python -m pytest
+ruff check .
+# Requires the real OpenVSP and VSPAERO binaries configured above:
+python examples/simple_aircraft/run_smoke.py
+```
+
+The smoke builds a fuselage, main wing, horizontal tail and vertical tail using
+`build.vspscript`, then uses a real MCP stdio connection to inspect, rename a wing,
+reject an invalid parameter edit, and solve the single-point case. It verifies
+source preservation and persistent results. `smoke_outputs/smoke_result.json`
+contains the full response. Set `OPENVSP_SMOKE_OUTPUT` to change the output folder.
+Observed smoke values are approximately CL 0.233343 and CD 0.00959482; these verify
+the workflow, not aerodynamic accuracy, convergence or design suitability.
+
+Unit/transport tests require no OpenVSP binaries and run in GitHub Actions. The real
+solver smoke is opt-in and is not part of the hosted CI job.
+
+## Other interfaces
+
+The same Python API remains available:
 
 ```python
-from importlib import resources
-import shutil
-import tempfile
-from pathlib import Path
+from openvsp_mcp import OpenVSPRequest, VSPAeroSettings, execute_openvsp
 
-from openvsp_mcp import OpenVSPRequest, VSPCommand, execute_openvsp
-
-with resources.as_file(resources.files("openvsp_mcp.data") / "rect_wing.vsp3") as bundled:
-    with tempfile.TemporaryDirectory(prefix="openvsp_mcp_") as tmpdir:
-        geometry_path = Path(tmpdir) / "rect_wing.vsp3"
-        shutil.copy(bundled, geometry_path)
-
-        request = OpenVSPRequest(
-            geometry_file=str(geometry_path),
-            set_commands=[
-                VSPCommand(command='string geom_id = FindGeom("RectWing", 0)'),
-                VSPCommand(command='string span_id = GetParm( geom_id, "TotalSpan", "WingGeom" )'),
-                VSPCommand(command='SetParmVal( span_id, 12.0 )'),
-                VSPCommand(command='Update()'),
-            ],
-            run_vspaero=False,
-            case_name="rectwing_span12",
-        )
-
-        response = execute_openvsp(request)
-        print("Script used:", response.script_path)
-        print("ADB path:", response.result_path)  # None unless run_vspaero=True
+response = execute_openvsp(OpenVSPRequest(
+    geometry_file="/absolute/path/wing.vsp3",
+    analysis=VSPAeroSettings(sref=12, bref=10, cref=1.2),
+))
+print(response.coefficients)
 ```
 
-`OpenVSPResponse` contains:
+HTTP MCP and REST are available for locally controlled clients:
 
-- `script_path` – absolute path to the generated `.vspscript` you can archive for repeatability.
-- `result_path` – VSPAero `.adb` file (string) when `run_vspaero=True`, otherwise `None`. Meshes, CSVs, and other artefacts are emitted by OpenVSP next to your original `.vsp3`.
-
-Need a starter geometry? The package ships with `openvsp_mcp.data/rect_wing.vsp3`, generated from a single OpenVSP wing primitive. The snippet above uses OpenVSP script helpers (`FindGeom` + `GetParm`) so it works out of the box. For your own models, open the geometry in the GUI, note the component name returned by `FindGeom`, and update the commands accordingly.
-
-## Run as a service
-
-### CLI (STDIO / Streamable HTTP)
-
-```bash
-uvx openvsp-mcp  # runs the MCP over stdio
-# or python -m openvsp_mcp
-python -m openvsp_mcp --transport streamable-http --host 0.0.0.0 --port 8000 --path /mcp
+```sh
+python -m openvsp_mcp --transport streamable-http --host 127.0.0.1 --port 8000 --path /mcp
+python -m uvicorn openvsp_mcp.fastapi_app:create_app --factory --host 127.0.0.1 --port 8002
 ```
 
-Registered tools:
+REST endpoints are `POST /vsp/inspect`, `/vsp/modify`, and `/vsp/run`. Their JSON
+body is the request object directly, without the MCP `request` wrapper.
 
-- `openvsp.inspect` – describe a geometry without modifying it.
-- `openvsp.modify` – apply scripted parameter edits (no VSPAero).
-- `openvsp.run_vspaero` – run edits followed by VSPAero.
+## Maintenance
 
-Use `python -m openvsp_mcp --describe` to list the tools at runtime.
-
-### FastAPI (REST)
-
-```bash
-uv run uvicorn openvsp_mcp.fastapi_app:create_app --factory --port 8002
-```
-
-Endpoints:
-
-- `POST /vsp/inspect` → `OpenVSPInspectResponse`
-- `POST /vsp/modify` → run edits only
-- `POST /vsp/run` → run edits + VSPAero
-
-All operations return structured JSON; explore them via the interactive docs at `http://127.0.0.1:8002/docs`.
-
-### python-sdk tool (STDIO / MCP)
-
-```python
-from mcp.server.fastmcp import FastMCP
-from openvsp_mcp.tool import build_tool
-
-mcp = FastMCP("openvsp-mcp", "OpenVSP automation")
-build_tool(mcp)
-
-if __name__ == "__main__":
-    mcp.run()
-```
-
-Then launch with `uv run mcp dev examples/openvsp_tool.py` and connect your agent.
-
-### ToolHive smoke test
-
-Requires exported binaries and a geometry file reachable inside the container:
-
-```bash
-export OPENVSP_BIN=/path/to/vsp
-export VSPAERO_BIN=/path/to/vspaero    # optional
-export OPENVSP_GEOMETRY=/path/to/model.vsp3
-uvx --with 'mcp==1.20.0' python scripts/integration/run_openvsp.py
-# ToolHive 2025+ defaults to Streamable HTTP; select the same transport when registering
-# the workload manually to avoid the legacy SSE 502 proxy issue.
-```
-
-## Agent playbook
-
-- **Geometry studies** - script sweep operations (span, twist, control surface deflections) and archive each variant.
-- **Aerodynamic coefficients** - hand VSPAero results to `ctrltest-mcp` or custom controllers.
-- **Mesh exports** - agents can request STL/OBJ assets for CFD or manufacturing pipelines.
-
-## Stretch ideas
-
-1. Pair with `foam-agent-mcp-core` to auto-generate mesh-ready cases.
-2. Use deck.gl to visualise planform edits by surfacing geometry metadata in the response.
-3. Schedule nightly configuration sweeps (span x sweep x incidence) and store the results for design-of-experiments studies.
-
-## Accessibility & upkeep
-
-- Run `uv run pytest` before committing; tests mock VSPAero calls so they finish quickly.
-- Keep OpenVSP/VSPAero versions consistent across developers to avoid geometry mismatches.
-
-## Contributing
-
-1. `uv pip install --system -e .[dev]`
-2. Run `uv run ruff check .` and `uv run pytest`
-3. Submit PRs with sample scripts or geometry diffs so reviewers can validate quickly.
-
-MIT license - see [LICENSE](LICENSE).
-- OpenVSP ships under NASA’s license; VSPAero usage must comply with the terms that accompany your download. Commercial redistribution generally requires a separate agreement—check the [official FAQ](https://openvsp.org/#license) before packaging binaries into your MCP workloads.
+Keep `upstream` pointing to the original project and `origin` to this fork. Use a
+small branch per reproducible issue, add a regression, and keep a verified version
+available before switching a daily MCP client. Track follow-up work in
+[the maintenance notes](docs/maintenance.md). See [LICENSE](LICENSE).
