@@ -1,0 +1,22 @@
+string Wing(string name,double span,double root,double tip,double x,double z,double sweep){
+ string w=AddGeom("WING",""); SetGeomName(w,name);
+ SetDriverGroup(w,1,SPAN_WSECT_DRIVER,ROOTC_WSECT_DRIVER,TIPC_WSECT_DRIVER);
+ SetParmVal(w,"Span","XSec_1",span);SetParmVal(w,"Root_Chord","XSec_1",root);SetParmVal(w,"Tip_Chord","XSec_1",tip);
+ SetParmVal(w,"Sweep","XSec_1",sweep);SetParmVal(w,"X_Rel_Location","XForm",x);SetParmVal(w,"Z_Rel_Location","XForm",z);
+ SetParmVal(w,"Tess_W","Shape",25);SetParmVal(w,"SectTess_U","XSec_1",17);
+ SetParmVal(w,"Camber","XSecCurve_0",0);SetParmVal(w,"Camber","XSecCurve_1",0);
+ SetParmVal(w,"ThickChord","XSecCurve_0",0.12);SetParmVal(w,"ThickChord","XSecCurve_1",0.12);
+ SetSetFlag(w,4,true);Update();return w;
+}
+int main(){
+ ClearVSPModel();SetSetName(3,"Thick_Fuselage");SetSetName(4,"Thin_Lifting_Surfaces");
+ string f=AddGeom("POD","");SetGeomName(f,"Fuselage");SetParmVal(f,"Length","Design",8);SetParmVal(f,"FineRatio","Design",8);
+ SetParmVal(f,"Tess_U","Shape",25);SetParmVal(f,"Tess_W","Shape",17);SetSetFlag(f,3,true);Update();
+ string w=Wing("Main_Wing",5,1.6,0.8,2.5,0,5);
+ string h=Wing("Horizontal_Tail",1.8,0.9,0.5,6.2,0.2,10);
+ string v=Wing("Vertical_Tail",1.5,1.2,0.5,6.1,0,20);
+ SetParmVal(v,"Sym_Planar_Flag","Sym",0);SetParmVal(v,"X_Rel_Rotation","XForm",90);Update();
+ SetVSP3FileName("simple_aircraft.vsp3");WriteVSPFile("simple_aircraft.vsp3",SET_ALL);
+
+ return GetNumTotalErrors();
+}

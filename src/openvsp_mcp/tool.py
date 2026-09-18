@@ -20,8 +20,9 @@ def build_tool(app: FastMCP) -> None:
     @app.tool(
         name="openvsp.inspect",
         description=(
-            "Describe an OpenVSP geometry without modifying it. Returns component IDs and raw info."),
-        meta={"version": "0.1.0", "categories": ["geometry", "aero", "inspection"]},
+            "Describe an OpenVSP geometry without modifying it. Returns component IDs and raw info."
+        ),
+        meta={"version": "0.3.0", "categories": ["geometry", "aero", "inspection"]},
     )
     def inspect(request: OpenVSPGeometryRequest) -> OpenVSPInspectResponse:
         return describe_geometry(request.geometry_file)
@@ -30,8 +31,9 @@ def build_tool(app: FastMCP) -> None:
         name="openvsp.modify",
         description=(
             "Apply scripted parameter edits to an OpenVSP model without running VSPAero. "
-            "Use set_commands to adjust geometry; returns the generated script path."),
-        meta={"version": "0.1.0", "categories": ["geometry"]},
+            "Updates the input file only after validation; returns persistent artifacts."
+        ),
+        meta={"version": "0.3.0", "categories": ["geometry"]},
     )
     def modify(request: OpenVSPRequest) -> OpenVSPResponse:
         return execute_openvsp(request.model_copy(update={"run_vspaero": False}))
@@ -39,8 +41,9 @@ def build_tool(app: FastMCP) -> None:
     @app.tool(
         name="openvsp.run_vspaero",
         description=(
-            "Run OpenVSP edits followed by VSPAero. Provide geometry commands and case_name."),
-        meta={"version": "0.1.0", "categories": ["geometry", "aero"]},
+            "Run one steady subsonic VSPAERO condition using the Analysis API. Supply analysis settings, geometry commands and case_name; preserves the input model."
+        ),
+        meta={"version": "0.3.0", "categories": ["geometry", "aero"]},
     )
     def run_vspaero(request: OpenVSPRequest) -> OpenVSPResponse:
         return execute_openvsp(request.model_copy(update={"run_vspaero": True}))
