@@ -2,22 +2,27 @@
 
 from __future__ import annotations
 
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, Response
 
-from .core import OPENVSP_BIN, VSPAERO_BIN, execute_openvsp
+from .core import execute_openvsp
 from .describe import describe_geometry
+from .health import health_check
 from .models import (
+    CreateModelRequest,
     OpenVSPGeometryRequest,
     OpenVSPInspectResponse,
     OpenVSPRequest,
     OpenVSPResponse,
+    SweepRequest,
 )
+from .version import __version__
+from .workflows import create_model, preflight_model, preview_model, run_sweep
 
 
 def create_app() -> FastAPI:
     app = FastAPI(
         title="OpenVSP MCP Service",
-        version="0.3.0",
+        version=__version__,
         description="Inspect and automate OpenVSP geometry edits, with optional VSPAero runs.",
     )
 
@@ -43,8 +48,38 @@ def create_app() -> FastAPI:
             raise HTTPException(status_code=500, detail=str(exc)) from exc
 
     @app.get("/health")
-    def health() -> dict[str, str]:
-        return {"status": "ok", "vsp": OPENVSP_BIN, "vspaero": VSPAERO_BIN}
+    def health(response: Response) -> dict:
+        result = health_check()
+        response.status_code = 200 if result["status"] == "ok" else 503
+        return result
+
+    @app.post("/vsp/create", response_model=OpenVSPResponse)
+    def create(request: CreateModelRequest):
+        try:
+            return create_model(request)
+        except RuntimeError as exc:
+            raise HTTPException(status_code=500, detail=str(exc)) from exc
+
+    @app.post("/vsp/preview", response_model=OpenVSPResponse)
+    def preview(request: OpenVSPRequest):
+        try:
+            return preview_model(request)
+        except RuntimeError as exc:
+            raise HTTPException(status_code=500, detail=str(exc)) from exc
+
+    @app.post("/vsp/preflight", response_model=OpenVSPResponse)
+    def preflight(request: OpenVSPRequest):
+        try:
+            return preflight_model(request)
+        except RuntimeError as exc:
+            raise HTTPException(status_code=500, detail=str(exc)) from exc
+
+    @app.post("/vsp/sweep")
+    def sweep(request: SweepRequest):
+        try:
+            return run_sweep(request)
+        except RuntimeError as exc:
+            raise HTTPException(status_code=500, detail=str(exc)) from exc
 
     return app
 

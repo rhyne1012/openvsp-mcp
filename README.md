@@ -1,65 +1,95 @@
 # openvsp-mcp — OpenVSP and VSPAERO through MCP
 
 A maintained fork of [Three-Little-Birds/openvsp-mcp](https://github.com/Three-Little-Birds/openvsp-mcp).
-Use it to inspect a model, apply AngelScript geometry edits, and run a single steady
-subsonic VSPAERO condition. The original MIT license and history are retained.
+Create and inspect aircraft models, edit geometry, export previews, check analysis
+inputs, and run steady subsonic VSPAERO conditions through MCP. The original MIT
+license and history are retained.
 
-The first maintenance release is **0.3.0**. See [migration notes](docs/maintenance.md)
-for behavior changes and [the aircraft regression](examples/simple_aircraft/run_smoke.py)
-for a complete, executable example.
+**0.4.0** adds executable health checks, model creation, previews, geometry-set
+preflight, sequential sweeps, and a staged local installer. See
+[migration and verification notes](docs/maintenance.md) and the executable
+[aircraft regression](examples/simple_aircraft/run_smoke.py).
 
 ## Install
 
-Python 3.10+ and a separate OpenVSP installation are required. The real integration
-case was verified on macOS Apple Silicon with **OpenVSP 3.51.3 / VSPAERO 7.2.2**.
-Other OpenVSP releases and platforms have not been integration-tested by this fork.
-The new pipeline uses the VSPAERO 7 thick/thin geometry-set interface; older releases
-are not claimed to be compatible. OpenVSP/VSPAERO binaries are not included.
+Python 3.10+ and a separate OpenVSP installation are required. Real integration
+is verified on macOS Apple Silicon with **OpenVSP 3.51.3 / VSPAERO 7.2.2**.
+Other binary versions/platforms have not been integration-tested. This pipeline
+requires the VSPAERO 7 thick/thin geometry-set interface. Binaries are not included.
+The MCP SDK is constrained to `>=1.20,<2` for the FastMCP 1.x interface.
+
+Keep Python environments, caches, and launchers on each computer's local disk.
+Source copies, models and result files can be synced; do not sync a venv or copy
+another computer's absolute-path client configuration. Validate each Mac separately.
 
 ```sh
 git clone https://github.com/rhyne1012/openvsp-mcp.git
 cd openvsp-mcp
-# While the first maintenance PR is under review:
-git checkout fix/reliable-vspaero
-python3 -m venv .venv
-source .venv/bin/activate
-python -m pip install -e '.[dev]'
+# Use a local directory outside iCloud/Dropbox for the environment.
+python3 -m venv "$HOME/Developer/Codex/.venvs/openvsp-mcp"
+. "$HOME/Developer/Codex/.venvs/openvsp-mcp/bin/activate"
+python -m pip install '.[dev]'
 
-# Example paths for the macOS application bundle; adjust for your installation.
+# Example macOS paths; adjust to this computer's installation.
 export OPENVSP_BIN=/Applications/OpenVSP.app/Contents/Resources/vspscript
 export VSPAERO_BIN=/Applications/OpenVSP.app/Contents/Resources/vspaero
-python -m openvsp_mcp --describe
+python -m openvsp_mcp --health
 ```
 
-`OPENVSP_BIN` should identify `vspscript`, or a `vsp` executable that accepts
-`-script`. `VSPAERO_BIN` identifies the solver installation; OpenVSP invokes it
-through its Analysis API. It is not called with a `.vsp3` filename as solver input.
-The MCP SDK is constrained to `>=1.20,<2` to retain the FastMCP 1.x interface.
+`OPENVSP_BIN` identifies `vspscript`, or a `vsp` accepting `-script`.
+`VSPAERO_BIN` identifies the solver installation; OpenVSP calls it through its
+Analysis API. The wrapper does not pass a `.vsp3` directly to the solver.
+
+`--describe` reports package/SDK versions and a SHA-256 fingerprint of packaged
+Python/model files. `--health` additionally launches a small OpenVSP geometry/API
+probe and queries VSPAERO's version; it exits 1 when either check fails. Health
+reports the binary paths and whether the version pair matches the tested pair.
+Health is a readiness check, not a full solve or a convergence certificate.
+
+For upgrades that preserve the previously selected environment until the candidate
+passes installation and health checks, see [the local installer](docs/local-install.md).
 
 ## MCP tools
 
-Start the server with `openvsp-mcp` or `python -m openvsp_mcp` (stdio by default).
-Configure the client with the absolute path to that executable and the binary
-paths above. Each tool accepts a nested `request` object.
+Start with `openvsp-mcp` or `python -m openvsp_mcp` (stdio by default). Configure
+the client with that computer's absolute Python path and binary environment values.
+All tools return structured results. All except `openvsp.health` take a nested
+`request` object; health takes `{}`.
 
 | Tool | Behavior |
 | --- | --- |
-| `openvsp.inspect` | Reads `.vsp3` XML metadata without starting OpenVSP or saving the file. |
-| `openvsp.modify` | Applies commands, validates the generated model, then replaces the input file. |
-| `openvsp.run_vspaero` | Applies commands to a copy, prepares aerodynamic geometry, solves, and validates results. Leaves the input file unchanged. |
+| `openvsp.health` | Probe binaries/API; report versions, paths and package fingerprint. |
+| `openvsp.create_model` | Create a four-component aircraft template or custom model without an input file. |
+| `openvsp.inspect` | Read `.vsp3` XML metadata without launching OpenVSP or saving the source. |
+| `openvsp.modify` | Apply commands, validate the output, then replace the input file. |
+| `openvsp.preview` | Export SVG and STL from a copy; preserve the source. |
+| `openvsp.preflight` | Check selected geometry sets in the loaded model and report reference/unit warnings; no solver. |
+| `openvsp.run_vspaero` | Prepare and solve one condition; validate artifacts and matching polar; preserve source. |
+| `openvsp.sweep` | Solve 1–25 explicitly specified conditions sequentially; retain partial results on failure. |
 
-Example inspection arguments:
+Create a model:
+
+```json
+{"request": {"output_dir": "/absolute/path/runs", "template": "simple_aircraft"}}
+```
+
+The template contains a fuselage, main wing, horizontal tail and vertical tail.
+Use its returned `geometry_path` for subsequent calls. `template: "custom"`
+requires `set_commands` that add geometry to the initially empty model.
+
+Inspect it:
 
 ```json
 {"request": {"geometry_file": "/absolute/path/aircraft.vsp3"}}
 ```
 
-Example solve arguments for the bundled four-component aircraft regression:
+Preview accepts the same minimal request. Preflight and solve accept these settings
+for the bundled aircraft:
 
 ```json
 {
   "request": {
-    "geometry_file": "/absolute/path/simple_aircraft.vsp3",
+    "geometry_file": "/absolute/path/aircraft.vsp3",
     "case_name": "single_point",
     "output_dir": "/absolute/path/runs",
     "timeout_seconds": 600,
@@ -75,21 +105,35 @@ Example solve arguments for the bundled four-component aircraft regression:
       "xcg": 3.0,
       "vinf": 34.03,
       "rho": 1.225,
-      "reynolds": 2900000.0
+      "reynolds": 2900000.0,
+      "length_unit": "m"
     }
   }
 }
 ```
 
-Set 3 contains the fuselage and set 4 contains the three lifting surfaces **in this
-example only**. Supply sets and reference dimensions appropriate to your own model.
-Defaults are all geometry as thin surfaces, no thick surfaces, unit reference
-area/span/chord, Mach 0.1 and alpha 3 degrees. Angles are in degrees. Geometry,
-reference dimensions, speed and density must use consistent units. Mach, speed,
-density and Reynolds number are independent inputs; the wrapper does not derive
-atmospheric consistency for you. This version runs exactly one flight condition.
+Set 3 is the fuselage and set 4 is the three lifting surfaces **in this template
+only**. Supply model-specific references and sets for other aircraft. `-1` disables
+one surface type. Nonexistent/empty selected sets, identical set indices, or actual
+geometry overlap between thick and thin sets are rejected before solving.
+Preflight does not check surface intersections, mesh quality or physical validity.
 
-To edit a model, use `set_commands`, for example:
+Defaults remain all geometry as thin surfaces, no thick surfaces, unit reference
+area/span/chord, Mach 0.1 and alpha 3 degrees. Angles are degrees. `length_unit`
+(`m`, `ft`, or `unspecified`) documents your convention; it does **not** convert
+any inputs. Geometry, references, speed and density must use consistent units.
+Mach, speed, density and Reynolds are independent; no atmospheric consistency is
+derived. Unit references and unspecified units produce warnings, not automatic
+corrections.
+
+For a sweep, replace `analysis` with a `conditions` list. Each entry is a complete
+analysis settings object with the same defaults; settings do not carry over from
+one entry to the next. Top-level `analysis` and `run_vspaero` are not accepted by
+this tool. For example, duplicate the explicit analysis object above and change
+`alpha` to 0 and 3. `timeout_seconds` budgets the entire batch. Each condition has
+its own run directory and verified polar. The batch uses a stable source snapshot.
+
+To edit, call `openvsp.modify` with `set_commands`, for example:
 
 ```json
 {
@@ -102,80 +146,78 @@ To edit a model, use `set_commands`, for example:
 }
 ```
 
-`set_commands` contains trusted AngelScript with the server process's privileges.
-Use the server locally with trusted clients. Inspection reports XML metadata; it
-does not certify geometric validity or solver compatibility.
+Commands are trusted AngelScript with server-process privileges; use trusted local
+clients. Preview/preflight/solve may apply commands to their private copy. Only
+`modify` replaces the original. Read-only preservation refers to the wrapper's
+normal operations; arbitrary trusted script commands can perform their own I/O.
 
 ## Results and failures
 
-Each modify/solve gets a new directory under `output_dir`, or `openvsp_runs` beside
-the source model. It contains an input snapshot, `automation.vspscript`, the output
-model, `openvsp.log`, and `manifest.json`. Solver runs also retain `solver.log`,
-`.vspgeom`, `.vspaero`, `.adb`, `.history`, `.polar`, and `history.csv`.
-Files are retained on success and failure; remove old run directories when no
-longer needed. Archived scripts read their own input snapshot. Re-running one can
-overwrite artifacts in that archived run, so copy the run first if preserving it.
+Each operation except health/inspection creates a unique directory under
+`output_dir`, or `openvsp_runs` beside the source. Creation requires `output_dir`.
+Runs preserve scripts, models, logs and `manifest.json`; operations on an existing
+model also preserve its input snapshot and hash. Solver runs retain `.vspgeom`,
+`.vspaero`, `.adb`, `.history`, `.polar`, `solver.log` and `history.csv`.
+Preview adds `preview.svg` and `preview.stl`. Sweep batches have `sweep.json`, with
+completed conditions retained if a later one fails. Runs are not automatically deleted.
 
-The response preserves `script_path` and `result_path` and adds `geometry_path`,
-`run_directory`, `log_path`, `manifest_path`, `artifacts`, `coefficients`, and
-`analysis_inputs`. All returned paths are absolute and exist on successful return.
-`analysis_inputs` records the explicitly applied settings; `openvsp.log` includes
-OpenVSP's analysis-input dump. Flight conditions are checked against the polar.
+Responses include absolute artifact paths, coefficients, applied settings,
+operation, warnings, preflight, numerical quality and package/SDK fingerprint.
+A solve requires zero script exit status, a unique completion marker, nonempty
+geometry, fresh nonempty solver artifacts, and one finite polar row matching Mach,
+alpha, beta and Reynolds. API errors and failures expose run/log paths. POSIX
+timeouts kill the process group, including the solver; Windows child cleanup has
+not been integration-verified.
 
-Success requires zero exit status, a unique script completion marker, a nonempty
-model, fresh nonempty solver artifacts, and a finite single-row polar matching
-Mach, alpha, beta, and Reynolds number. API errors cause an explicit failure.
-A failure returns the run directory and log path. POSIX timeouts terminate the
-process group, including the solver. Windows child-process cleanup has not been
-integration-verified.
+`numerical_quality` reports observed last-step coefficient changes and the range
+of the final five recorded iterations when the history format is recognized.
+It explicitly reports `convergence_status: "not_assessed"` and
+`mesh_study: "not_performed"`. Completed execution, small iteration changes, and
+sweep success do not establish aerodynamic accuracy or mesh convergence.
+
+Archived scripts read their own snapshot. Rerunning a script can overwrite that
+run's artifacts; copy the run first when preserving evidence.
 
 ## Verification
 
 ```sh
 python -m pytest
 ruff check .
-# Requires the real OpenVSP and VSPAERO binaries configured above:
+# Real OpenVSP/VSPAERO required; exercises all eight tools over MCP stdio:
 python examples/simple_aircraft/run_smoke.py
 ```
 
-The smoke builds a fuselage, main wing, horizontal tail and vertical tail using
-`build.vspscript`, then uses a real MCP stdio connection to inspect, rename a wing,
-reject an invalid parameter edit, and solve the single-point case. It verifies
-source preservation and persistent results. `smoke_outputs/smoke_result.json`
-contains the full response. Set `OPENVSP_SMOKE_OUTPUT` to change the output folder.
-Observed smoke values are approximately CL 0.233343 and CD 0.00959482; these verify
-the workflow, not aerodynamic accuracy, convergence or design suitability.
+The real smoke creates and previews an aircraft, verifies source preservation,
+checks actual geometry sets, rejects absent/empty/overlapping sets before solving,
+renames a wing, rejects an invalid parameter edit, runs one condition and an
+alpha 0/3 degree sweep. Full responses are saved in `smoke_outputs/smoke_result.json`;
+set `OPENVSP_SMOKE_OUTPUT` to choose a different output directory.
+The alpha 3 case gives approximately CL 0.233343 and CD 0.00959482. These numbers
+verify the workflow, not accuracy, convergence or design suitability.
 
-Unit/transport tests require no OpenVSP binaries and run in GitHub Actions. The real
-solver smoke is opt-in and is not part of the hosted CI job.
+Hosted CI uses no native binaries. Native smoke testing remains opt-in and must
+be repeated for each computer and binary version.
 
 ## Other interfaces
 
-The same Python API remains available:
+Python exports include `CreateModelRequest`, `SweepRequest`, `OpenVSPRequest`,
+`VSPAeroSettings`, `create_model`, `preview_model`, `preflight_model`, `run_sweep`,
+`health_check` and `execute_openvsp`.
 
-```python
-from openvsp_mcp import OpenVSPRequest, VSPAeroSettings, execute_openvsp
-
-response = execute_openvsp(OpenVSPRequest(
-    geometry_file="/absolute/path/wing.vsp3",
-    analysis=VSPAeroSettings(sref=12, bref=10, cref=1.2),
-))
-print(response.coefficients)
-```
-
-HTTP MCP and REST are available for locally controlled clients:
+HTTP MCP binds to loopback by default:
 
 ```sh
 python -m openvsp_mcp --transport streamable-http --host 127.0.0.1 --port 8000 --path /mcp
 python -m uvicorn openvsp_mcp.fastapi_app:create_app --factory --host 127.0.0.1 --port 8002
 ```
 
-REST endpoints are `POST /vsp/inspect`, `/vsp/modify`, and `/vsp/run`. Their JSON
-body is the request object directly, without the MCP `request` wrapper.
+REST exposes `GET /health` (200 ready, 503 unhealthy) and `POST /vsp/inspect`,
+`/vsp/create`, `/vsp/modify`, `/vsp/preview`, `/vsp/preflight`, `/vsp/run`, and
+`/vsp/sweep`. POST bodies contain the request object without the MCP wrapper.
+No authentication is provided; these interfaces are intended for trusted local use.
 
 ## Maintenance
 
 Keep `upstream` pointing to the original project and `origin` to this fork. Use a
-small branch per reproducible issue, add a regression, and keep a verified version
-available before switching a daily MCP client. Track follow-up work in
-[the maintenance notes](docs/maintenance.md). See [LICENSE](LICENSE).
+small branch per reproducible issue and retain a verified environment before
+switching a daily MCP client. See [maintenance notes](docs/maintenance.md) and [LICENSE](LICENSE).

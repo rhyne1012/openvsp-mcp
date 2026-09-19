@@ -2,7 +2,9 @@
 
 from __future__ import annotations
 
-from pydantic import BaseModel, ConfigDict, Field
+from typing import Literal
+
+from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 
 class VSPCommand(BaseModel):
@@ -36,6 +38,13 @@ class VSPAeroSettings(BaseModel):
     ncpu: int = Field(4, ge=1, le=256)
     wake_iterations: int = Field(30, ge=1, le=1000)
     wake_nodes: int = Field(32, ge=4, le=1024)
+    length_unit: Literal["unspecified", "m", "ft"] = "unspecified"
+
+    @model_validator(mode="after")
+    def disjoint_sets(self):
+        if self.thick_geom_set == self.thin_geom_set:
+            raise ValueError("Thick and thin sets must differ; at least one must be selected")
+        return self
 
 
 class OpenVSPRequest(BaseModel):
@@ -67,3 +76,33 @@ class OpenVSPResponse(BaseModel):
     artifacts: dict[str, str] = Field(default_factory=dict)
     coefficients: dict[str, float] = Field(default_factory=dict)
     analysis_inputs: dict = Field(default_factory=dict)
+    operation: str = "run_vspaero"
+    warnings: list[str] = Field(default_factory=list)
+    preflight: dict = Field(default_factory=dict)
+    numerical_quality: dict = Field(default_factory=dict)
+    versions: dict = Field(default_factory=dict)
+
+
+class CreateModelRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    output_dir: str
+    case_name: str = Field("aircraft", pattern=r"^[A-Za-z0-9][A-Za-z0-9_-]{0,63}$")
+    template: Literal["simple_aircraft", "custom"] = "simple_aircraft"
+    set_commands: list[VSPCommand] = Field(default_factory=list)
+    timeout_seconds: int = Field(120, ge=1, le=600)
+
+    @model_validator(mode="after")
+    def custom_has_commands(self):
+        if self.template == "custom" and not self.set_commands:
+            raise ValueError("Custom creation requires set_commands adding geometry")
+        return self
+
+
+class SweepRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    geometry_file: str
+    set_commands: list[VSPCommand] = Field(default_factory=list)
+    case_name: str = Field("sweep", pattern=r"^[A-Za-z0-9][A-Za-z0-9_-]{0,63}$")
+    output_dir: str | None = None
+    timeout_seconds: int = Field(600, ge=1, le=86400)
+    conditions: list[VSPAeroSettings] = Field(min_length=1, max_length=25)
