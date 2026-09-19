@@ -41,7 +41,8 @@ def simulator(monkeypatch):
         run_dir = script.parent
         text = script.read_text()
         marker = re.search(r"OPENVSP_MCP_SUCCESS_[a-f0-9]+", text).group()
-        log.write_text(marker if behavior["marker"] else "Compile error")
+        preflight = "\nPREFLIGHT_OK\n" if behavior.get("preflight", True) else ""
+        log.write_text(marker + preflight if behavior["marker"] else "Compile error")
         snapshot = run_dir / "input" / "source.vsp3"
         match = re.search(r'SetVSP3FileName\((".*")\);', text)
         model = Path(json.loads(match.group(1)))
@@ -51,6 +52,9 @@ def simulator(monkeypatch):
         model.with_suffix(".polar").write_text(behavior["polar"])
         (run_dir / "history.csv").write_text("CL,0.233\n")
         (run_dir / "solver.log").write_text("Done\n")
+        if "EXPORT_SVG" in text:
+            (run_dir / "preview.svg").write_text("<svg/>")
+            (run_dir / "preview.stl").write_text("solid aircraft\nendsolid aircraft\n")
         if behavior["omit"]:
             (run_dir / behavior["omit"]).unlink()
         if behavior.get("concurrent_edit"):
@@ -137,6 +141,29 @@ def test_zero_exit_without_completion_marker_is_failure(request_model, simulator
     simulator["marker"] = False
     with pytest.raises(RuntimeError, match="completion marker"):
         core.execute_openvsp(request_model)
+
+
+def test_missing_preflight_marker_is_failure(request_model, simulator):
+    simulator["preflight"] = False
+    with pytest.raises(RuntimeError, match="preflight marker"):
+        core.execute_openvsp(request_model)
+
+
+@pytest.mark.parametrize("missing", [None, "preview.svg", "preview.stl"])
+def test_preview_requires_exports_and_preserves_source(request_model, simulator, missing):
+    source = Path(request_model.geometry_file)
+    before = source.read_bytes()
+    simulator["omit"] = missing
+    if missing:
+        with pytest.raises(RuntimeError, match="Missing or empty preview"):
+            core.execute_openvsp(request_model, operation="preview")
+    else:
+        result = core.execute_openvsp(request_model, operation="preview")
+        assert result.operation == "preview" and result.result_path is None
+        script = Path(result.script_path).read_text()
+        assert "VSPAEROSweep" not in script
+        assert all(name in result.artifacts for name in ["preview.svg", "preview.stl"])
+    assert source.read_bytes() == before
 
 
 @pytest.mark.parametrize(

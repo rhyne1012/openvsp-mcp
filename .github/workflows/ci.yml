@@ -9,11 +9,14 @@ on:
 jobs:
   test:
     runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        python: ['3.10', '3.13']
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
         with:
-          python-version: '3.11'
+          python-version: ${{ matrix.python }}
       - uses: astral-sh/setup-uv@v3
       - name: Create virtual environment
         run: uv venv
@@ -26,3 +29,11 @@ jobs:
       - name: Tests
         run: |
           uv run pytest
+      - name: Installed wheel outside checkout
+        run: |
+          uv build --wheel
+          uv venv .venv-package
+          uv pip install --python .venv-package/bin/python dist/*.whl
+          cd "$RUNNER_TEMP"
+          "$GITHUB_WORKSPACE/.venv-package/bin/python" -I -m openvsp_mcp --describe
+          "$GITHUB_WORKSPACE/.venv-package/bin/python" -I -c 'from importlib.metadata import version; from importlib.resources import files; from openvsp_mcp import __version__; assert __version__ == version("openvsp-mcp"); assert (files("openvsp_mcp.data") / "rect_wing.vsp3").is_file()'

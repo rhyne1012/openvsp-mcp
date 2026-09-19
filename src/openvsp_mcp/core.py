@@ -14,7 +14,10 @@ from pathlib import Path
 from shutil import copy2, which
 
 from .describe import describe_geometry
+from .geometry import preflight_commands
 from .models import OpenVSPRequest, OpenVSPResponse
+from .quality import history_diagnostics
+from .version import version_info
 
 OPENVSP_BIN = os.environ.get("OPENVSP_BIN") or which("vspscript") or which("vsp") or "vsp"
 # Retained for health/config compatibility. The Analysis API finds vspaero via SetVSPAEROPath.
@@ -39,7 +42,9 @@ def _input(analysis: str, name: str, value: float | str) -> str:
     return f'{{ array<{atype}> x={{{literal}}}; Set{kind}AnalysisInput("{analysis}","{name}",x); }}'
 
 
-def _write_script(request: OpenVSPRequest, run_dir: Path, token: str) -> Path:
+def _write_script(
+    request: OpenVSPRequest, run_dir: Path, token: str, operation: str = "modify"
+) -> Path:
     model = run_dir / f"{request.case_name}.vsp3"
     # An integer main with an explicit return fixes undefined exit values from void main.
     lines = [
@@ -50,7 +55,11 @@ def _write_script(request: OpenVSPRequest, run_dir: Path, token: str) -> Path:
         ),
         "int main() {",
         "ClearVSPModel();",
-        f"ReadVSPFile({_quote(run_dir / 'input' / 'source.vsp3')});",
+        (
+            f"ReadVSPFile({_quote(run_dir / 'input' / 'source.vsp3')});"
+            if operation != "create"
+            else "// Start with an empty model."
+        ),
         "if(CheckErrors()!=0) return 1;",
     ]
     lines.extend(_ensure_statement(c.command) for c in request.set_commands)
@@ -61,6 +70,16 @@ def _write_script(request: OpenVSPRequest, run_dir: Path, token: str) -> Path:
         f"WriteVSPFile({_quote(model)},SET_ALL);",
         "if(CheckErrors()!=0) return 3;",
     ]
+    if request.run_vspaero or operation == "preflight":
+        lines.extend(
+            preflight_commands(request.analysis.thick_geom_set, request.analysis.thin_geom_set)
+        )
+    if operation == "preview":
+        lines += [
+            f"ExportFile({_quote(run_dir / 'preview.svg')},SET_ALL,EXPORT_SVG);",
+            f"ExportFile({_quote(run_dir / 'preview.stl')},SET_ALL,EXPORT_STL);",
+            "if(CheckErrors()!=0) return 9;",
+        ]
     if request.run_vspaero:
         solver = which(VSPAERO_BIN)
         if not solver and Path(VSPAERO_BIN).is_file():
@@ -127,13 +146,16 @@ def _write_script(request: OpenVSPRequest, run_dir: Path, token: str) -> Path:
 
 def _run_script(script: Path, log: Path, timeout: int) -> int:
     """Keep logs on failure; terminate the solver process group on POSIX timeouts."""
-    with log.open("wb") as stream, subprocess.Popen(
-        [OPENVSP_BIN, "-script", str(script)],
-        cwd=script.parent,
-        stdout=stream,
-        stderr=subprocess.STDOUT,
-        start_new_session=(os.name == "posix"),
-    ) as proc:
+    with (
+        log.open("wb") as stream,
+        subprocess.Popen(
+            [OPENVSP_BIN, "-script", str(script)],
+            cwd=script.parent,
+            stdout=stream,
+            stderr=subprocess.STDOUT,
+            start_new_session=(os.name == "posix"),
+        ) as proc,
+    ):
         try:
             return proc.wait(timeout=timeout)
         except subprocess.TimeoutExpired:
@@ -181,22 +203,33 @@ def _read_polar(path: Path, request: OpenVSPRequest) -> dict[str, float]:
     return row
 
 
-def execute_openvsp(request: OpenVSPRequest) -> OpenVSPResponse:
-    source = Path(request.geometry_file).expanduser().resolve()
-    describe_geometry(str(source))  # Validate before launching anything.
-    if source.suffix.lower() != ".vsp3":
+def execute_openvsp(request: OpenVSPRequest, *, operation: str | None = None) -> OpenVSPResponse:
+    operation = operation or ("run_vspaero" if request.run_vspaero else "modify")
+    if operation not in {"run_vspaero", "modify", "create", "preview", "preflight"}:
+        raise ValueError("Unknown OpenVSP operation")
+    source = None if operation == "create" else Path(request.geometry_file).expanduser().resolve()
+    if source is not None:
+        describe_geometry(str(source))  # Validate before launching anything.
+    if source is not None and source.suffix.lower() != ".vsp3":
         raise RuntimeError("geometry_file must have a .vsp3 extension")
     parent = (
         Path(request.output_dir).expanduser().resolve()
         if request.output_dir
         else source.parent / "openvsp_runs"
+        if source is not None
+        else Path("openvsp_runs").resolve()
     )
     try:
         parent.mkdir(parents=True, exist_ok=True)
         run_dir = Path(tempfile.mkdtemp(prefix=request.case_name + "-", dir=parent))
     except OSError as exc:
         raise RuntimeError(f"Cannot create output directory: {exc}") from exc
-    request = request.model_copy(update={"geometry_file": str(source)})
+    request = request.model_copy(
+        update={
+            "geometry_file": str(source) if source else "",
+            "run_vspaero": operation == "run_vspaero",
+        }
+    )
     token = uuid.uuid4().hex
     script = run_dir / "automation.vspscript"
     log = run_dir / "openvsp.log"
@@ -206,6 +239,8 @@ def execute_openvsp(request: OpenVSPRequest) -> OpenVSPResponse:
         "request": request.model_dump(),
         "openvsp_binary": OPENVSP_BIN,
         "vspaero_binary": VSPAERO_BIN,
+        "operation": operation,
+        "versions": version_info(),
     }
 
     def save_manifest():
@@ -214,16 +249,25 @@ def execute_openvsp(request: OpenVSPRequest) -> OpenVSPResponse:
     save_manifest()
     try:
         log.touch()
-        snapshot = run_dir / "input" / "source.vsp3"
-        snapshot.parent.mkdir()
-        copy2(source, snapshot)
-        source_hash = hashlib.sha256(snapshot.read_bytes()).hexdigest()
-        manifest["input_sha256"] = source_hash
-        _write_script(request, run_dir, token)
+        if source is not None:
+            snapshot = run_dir / "input" / "source.vsp3"
+            snapshot.parent.mkdir()
+            copy2(source, snapshot)
+            source_hash = hashlib.sha256(snapshot.read_bytes()).hexdigest()
+            manifest["input_sha256"] = source_hash
+        _write_script(request, run_dir, token, operation)
         rc = _run_script(script, log, request.timeout_seconds)
         manifest["returncode"] = rc
         if rc != 0:
-            raise RuntimeError(f"OpenVSP exited with code {rc}")
+            detail = next(
+                (
+                    s.strip()
+                    for s in log.read_text(errors="replace").splitlines()
+                    if "PREFLIGHT_ERROR:" in s
+                ),
+                "",
+            )
+            raise RuntimeError(f"OpenVSP exited with code {rc}. {detail}".rstrip())
         if f"OPENVSP_MCP_SUCCESS_{token}" not in log.read_text(errors="replace"):
             raise RuntimeError("OpenVSP did not reach the verified script completion marker")
         model = run_dir / f"{request.case_name}.vsp3"
@@ -231,6 +275,34 @@ def execute_openvsp(request: OpenVSPRequest) -> OpenVSPResponse:
             raise RuntimeError("Output model contains no geometry")
         coefficients = {}
         result = None
+        quality = {}
+        warnings = []
+        preflight = {}
+        if request.run_vspaero or operation == "preflight":
+            text = log.read_text(errors="replace")
+            if "PREFLIGHT_OK" not in text:
+                raise RuntimeError("Missing verified geometry preflight marker")
+            preflight = {"status": "passed", "thick_geom_ids": [], "thin_geom_ids": []}
+            for line in text.splitlines():
+                for kind in ["thick", "thin"]:
+                    prefix = f"PREFLIGHT_{kind.upper()}_ID:"
+                    if line.strip().startswith(prefix):
+                        preflight[kind + "_geom_ids"].append(line.strip()[len(prefix) :])
+            a = request.analysis
+            if (a.sref, a.bref, a.cref) == (1, 1, 1):
+                warnings.append("Unit reference dimensions selected; confirm Sref, Bref and Cref.")
+            if a.length_unit == "unspecified":
+                warnings.append(
+                    "Units unspecified: geometry, references, speed and density must agree."
+                )
+            warnings.append(
+                "Mach, speed, density and Reynolds are independent inputs; verify atmosphere."
+            )
+            preflight["analysis_inputs"] = a.model_dump()
+        if operation == "preview":
+            for name in ["preview.svg", "preview.stl"]:
+                if not (run_dir / name).is_file() or not (run_dir / name).stat().st_size:
+                    raise RuntimeError(f"Missing or empty preview: {name}")
         if request.run_vspaero:
             for ext in ["adb", "polar", "history", "vspgeom", "vspaero"]:
                 f = run_dir / f"{request.case_name}.{ext}"
@@ -242,7 +314,8 @@ def execute_openvsp(request: OpenVSPRequest) -> OpenVSPResponse:
                     raise RuntimeError(f"Missing or empty solver artifact: {name}")
             coefficients = _read_polar(run_dir / f"{request.case_name}.polar", request)
             result = str(run_dir / f"{request.case_name}.adb")
-        else:
+            quality = history_diagnostics(run_dir / f"{request.case_name}.history")
+        elif operation == "modify":
             # Preserve modify's in-place behavior, but replace only after validation.
             if hashlib.sha256(source.read_bytes()).hexdigest() != source_hash:
                 raise RuntimeError("Input model changed during the run; refusing to overwrite it")
@@ -253,7 +326,13 @@ def execute_openvsp(request: OpenVSPRequest) -> OpenVSPResponse:
                 os.replace(tmp, source)
             finally:
                 Path(tmp).unlink(missing_ok=True)
-        manifest.update(status="success", coefficients=coefficients)
+        manifest.update(
+            status="success",
+            coefficients=coefficients,
+            warnings=warnings,
+            preflight=preflight,
+            numerical_quality=quality,
+        )
         save_manifest()
         return OpenVSPResponse(
             script_path=str(script),
@@ -266,7 +345,14 @@ def execute_openvsp(request: OpenVSPRequest) -> OpenVSPResponse:
                 str(f.relative_to(run_dir)): str(f) for f in run_dir.rglob("*") if f.is_file()
             },
             coefficients=coefficients,
-            analysis_inputs=request.analysis.model_dump() if request.run_vspaero else {},
+            analysis_inputs=request.analysis.model_dump()
+            if request.run_vspaero or operation == "preflight"
+            else {},
+            operation=operation,
+            warnings=warnings,
+            preflight=preflight,
+            numerical_quality=quality,
+            versions=manifest["versions"],
         )
     except (OSError, RuntimeError) as exc:
         with log.open("a", encoding="utf-8") as stream:
