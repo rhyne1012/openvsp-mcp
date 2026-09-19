@@ -1,9 +1,8 @@
 # openvsp-mcp — OpenVSP and VSPAERO through MCP
 
-A maintained fork of [Three-Little-Birds/openvsp-mcp](https://github.com/Three-Little-Birds/openvsp-mcp).
-Create and inspect aircraft models, edit geometry, export previews, check analysis
-inputs, and run steady subsonic VSPAERO conditions through MCP. The original MIT
-license and history are retained.
+A maintained fork of [Three-Little-Birds/openvsp-mcp](https://github.com/Three-Little-Birds/openvsp-mcp),
+extending MCP automation for OpenVSP and VSPAERO with geometry inspection, model
+modification, and aerodynamic analysis. The original MIT license and history are retained.
 
 **0.4.0** adds executable health checks, model creation, previews, geometry-set
 preflight, sequential sweeps, and a staged local installer. See
