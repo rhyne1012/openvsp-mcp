@@ -27,7 +27,7 @@ def test_stdio_inspection_validation_and_error_response(tmp_path):
             ClientSession(read, write) as session,
         ):
             initialized = await session.initialize()
-            assert initialized.serverInfo.version == "0.4.0"
+            assert initialized.serverInfo.version == "0.5.0"
             tools = {t.name: t for t in (await session.list_tools()).tools}
             assert set(tools) == {
                 "openvsp.inspect",
@@ -38,6 +38,9 @@ def test_stdio_inspection_validation_and_error_response(tmp_path):
                 "openvsp.preview",
                 "openvsp.preflight",
                 "openvsp.sweep",
+                "openvsp.query",
+                "openvsp.read_results",
+                "openvsp.set_parameters",
             }
             assert "analysis" in json.dumps(tools["openvsp.run_vspaero"].inputSchema)
             assert all(tool.outputSchema for tool in tools.values())

@@ -1,4 +1,4 @@
-"""Exercise all eight tools and real VSPAERO through MCP stdio (opt-in)."""
+"""Exercise all eleven tools and real VSPAERO through MCP stdio (opt-in)."""
 
 from __future__ import annotations
 
@@ -48,6 +48,9 @@ async def main() -> None:
                     "preflight",
                     "run_vspaero",
                     "sweep",
+                    "query",
+                    "set_parameters",
+                    "read_results",
                 ]
             }
 
@@ -63,6 +66,14 @@ async def main() -> None:
             health = await call("health")
             assert health["status"] == "ok", health
             evidence["health"] = health
+            evidence["capabilities"] = await call("query", {"kind": "capabilities"})
+            assert "VSPAEROSweep" in evidence["capabilities"]["analyses"]
+            cached = await call("query", {"kind": "capabilities"})
+            assert cached["cache_hit"]
+            evidence["analysis_schema"] = await call("query", {"kind": "analysis"})
+            assert "FixedWakeFlag" in {
+                item["name"] for item in evidence["analysis_schema"]["inputs"]
+            }
             created = await call("create_model", {"output_dir": str(out)})
             evidence["create"] = created
             model = Path(created["geometry_path"])
@@ -119,7 +130,44 @@ async def main() -> None:
             )
             renamed = await call("inspect", {"geometry_file": str(editable)})
             assert "Renamed_Wing" in renamed["wing_names"]
+            parameters = await call(
+                "query", {"kind": "parameters", "geometry_file": str(editable), "limit": 200}
+            )
+            length = next(
+                p
+                for p in parameters["parameters"]
+                if p["name"] == "Length" and p["group"] == "Design"
+            )
+            evidence["parameters"] = await call(
+                "set_parameters",
+                {
+                    "geometry_file": str(editable),
+                    "output_dir": str(out),
+                    "edits": [{"parm_id": length["id"], "value": 8.1}],
+                },
+            )
+            assert abs(evidence["parameters"]["parameter_values"][length["id"]] - 8.1) < 1e-9
+            readback = await call(
+                "query",
+                {"kind": "parameters", "geometry_file": str(editable), "parm_ids": [length["id"]]},
+            )
+            assert abs(readback["parameters"][0]["value"] - 8.1) < 1e-9
             after_edit = digest(editable)
+            for edit in [
+                {"parm_id": "missing", "value": 1},
+                {"parm_id": length["id"], "value": length["lower"] - 1},
+            ]:
+                failed = await session.call_tool(
+                    "openvsp.set_parameters",
+                    {
+                        "request": {
+                            "geometry_file": str(editable),
+                            "output_dir": str(out),
+                            "edits": [edit],
+                        }
+                    },
+                )
+                assert failed.isError and digest(editable) == after_edit
             failed = await session.call_tool(
                 "openvsp.modify",
                 {
@@ -142,6 +190,43 @@ async def main() -> None:
             assert response.numerical_quality["convergence_status"] == "not_assessed"
             assert response.numerical_quality["history_status"] == "available"
             evidence["solve"] = response.model_dump()
+            assert response.effective_settings["status"] == "verified"
+            evidence["saved_results"] = await call(
+                "read_results",
+                {
+                    "manifest_file": response.manifest_path,
+                    "coefficient_names": ["CLtot", "CDtot"],
+                    "log": "solver",
+                    "log_tail_lines": 5,
+                },
+            )
+            assert (
+                evidence["saved_results"]["coefficients"]["CLtot"] == response.coefficients["CLtot"]
+            )
+            evidence["fixed_wake"] = await call(
+                "run_vspaero",
+                request
+                | {
+                    "case_name": "fixed_wake",
+                    "analysis": analysis.model_dump()
+                    | {
+                        "fixed_wake": True,
+                        "forward_gmres_tolerance_factor": 0.001,
+                    },
+                },
+            )
+            assert (
+                evidence["fixed_wake"]["effective_settings"]["solver_file_values"]["WakeIters"] == 0
+            )
+            assert (
+                abs(
+                    evidence["fixed_wake"]["effective_settings"]["solver_file_values"][
+                        "ForwardGMRESConvergenceFactor"
+                    ]
+                    - 0.001
+                )
+                < 1e-12
+            )
             sweep = await call(
                 "sweep",
                 {
@@ -169,8 +254,12 @@ async def main() -> None:
                     "source preserved",
                     "modify saved",
                     "API error rejected",
+                    "native capability cache and analysis inputs",
+                    "parameter query, edit/readback and rejected invalid edits",
                     "absent/empty/overlapping sets rejected before solver",
                     "VSPAERO solve",
+                    "fixed wake and GMRES solver input verified",
+                    "saved result read without solver rerun",
                     "two-point sweep",
                 ],
                 "CL": response.coefficients["CLtot"],

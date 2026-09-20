@@ -10,8 +10,8 @@ def history_diagnostics(path: Path) -> dict:
         "mesh_study": "not_performed",
         "scope": "Iteration changes are diagnostics, not an accuracy or convergence gate.",
     }
-    header, rows = None, []
-    for line in path.read_text(errors="replace").splitlines():
+    header, rows, invalid = None, [], []
+    for number, line in enumerate(path.read_text(errors="replace").splitlines(), 1):
         cols = (
             line.replace("L2 Residual", "L2_Residual")
             .replace("Max Residual", "Max_Residual")
@@ -23,9 +23,18 @@ def history_diagnostics(path: Path) -> dict:
             try:
                 values = [float(v) for v in cols]
             except ValueError:
+                invalid.append(number)
                 continue
             if len(values) == len(header) and all(math.isfinite(v) for v in values):
                 rows.append(dict(zip(header, values)))
+            else:
+                invalid.append(number)
+    if invalid:
+        return report | {
+            "history_status": "invalid",
+            "invalid_line_numbers": invalid,
+            "iterations_recorded": len(rows),
+        }
     keys = ["CLtot", "CDtot", "CMytot"]
     if len(rows) < 2 or not all(k in rows[-1] for k in keys):
         return report | {"history_status": "unavailable_or_insufficient"}

@@ -35,9 +35,11 @@ class VSPAeroSettings(BaseModel):
     xcg: float = 0.0
     ycg: float = 0.0
     zcg: float = 0.0
-    ncpu: int = Field(4, ge=1, le=256)
-    wake_iterations: int = Field(30, ge=1, le=1000)
+    ncpu: int = Field(4, ge=1, le=255)
+    wake_iterations: int = Field(30, ge=3, le=255)
     wake_nodes: int = Field(32, ge=4, le=1024)
+    fixed_wake: bool = False
+    forward_gmres_tolerance_factor: float = Field(1.0, gt=0, le=1e12)
     length_unit: Literal["unspecified", "m", "ft"] = "unspecified"
 
     @model_validator(mode="after")
@@ -58,6 +60,7 @@ class OpenVSPRequest(BaseModel):
     output_dir: str | None = Field(None, description="Parent directory for unique, persistent runs")
     timeout_seconds: int = Field(600, ge=1, le=86400)
     analysis: VSPAeroSettings = Field(default_factory=VSPAeroSettings)
+    parameter_edits: list[ParameterEdit] = Field(default_factory=list, max_length=200)
 
 
 class OpenVSPInspectResponse(BaseModel):
@@ -81,6 +84,9 @@ class OpenVSPResponse(BaseModel):
     preflight: dict = Field(default_factory=dict)
     numerical_quality: dict = Field(default_factory=dict)
     versions: dict = Field(default_factory=dict)
+    effective_settings: dict = Field(default_factory=dict)
+    parameter_values: dict[str, float] = Field(default_factory=dict)
+    timings: dict[str, float] = Field(default_factory=dict)
 
 
 class CreateModelRequest(BaseModel):
@@ -106,3 +112,52 @@ class SweepRequest(BaseModel):
     output_dir: str | None = None
     timeout_seconds: int = Field(600, ge=1, le=86400)
     conditions: list[VSPAeroSettings] = Field(min_length=1, max_length=25)
+
+
+class ParameterEdit(BaseModel):
+    model_config = ConfigDict(extra="forbid", allow_inf_nan=False)
+    parm_id: str = Field(min_length=1)
+    value: float
+
+
+class ParameterEditRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    geometry_file: str
+    edits: list[ParameterEdit] = Field(min_length=1, max_length=200)
+    output_dir: str | None = None
+    timeout_seconds: int = Field(120, ge=1, le=600)
+
+    @model_validator(mode="after")
+    def unique_ids(self):
+        if len({e.parm_id for e in self.edits}) != len(self.edits):
+            raise ValueError("Duplicate parameter IDs are not allowed")
+        return self
+
+
+class QueryRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    kind: Literal["capabilities", "analysis", "parameters"] = "capabilities"
+    geometry_file: str | None = None
+    analysis_name: str = "VSPAEROSweep"
+    geom_id: str | None = None
+    parm_ids: list[str] = Field(default_factory=list, max_length=200)
+    offset: int = Field(0, ge=0)
+    limit: int = Field(100, ge=1, le=200)
+    timeout_seconds: int = Field(30, ge=1, le=120)
+
+    @model_validator(mode="after")
+    def parameter_source(self):
+        if self.kind == "parameters" and not self.geometry_file:
+            raise ValueError("Parameter queries require geometry_file")
+        return self
+
+
+class ResultRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    manifest_file: str
+    coefficient_names: list[str] = Field(default_factory=list, max_length=200)
+    log: Literal["none", "openvsp", "solver"] = "none"
+    log_tail_lines: int = Field(40, ge=1, le=200)
+
+
+OpenVSPRequest.model_rebuild()

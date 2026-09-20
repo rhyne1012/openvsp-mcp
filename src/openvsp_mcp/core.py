@@ -9,6 +9,7 @@ import os
 import signal
 import subprocess
 import tempfile
+import time
 import uuid
 from pathlib import Path
 from shutil import copy2, which
@@ -17,6 +18,8 @@ from .describe import describe_geometry
 from .geometry import preflight_commands
 from .models import OpenVSPRequest, OpenVSPResponse
 from .quality import history_diagnostics
+from .runtime import OperationCancelled, check_cancelled, commit_lock
+from .settings import read_effective_settings
 from .version import version_info
 
 OPENVSP_BIN = os.environ.get("OPENVSP_BIN") or which("vspscript") or which("vsp") or "vsp"
@@ -63,9 +66,31 @@ def _write_script(
         "if(CheckErrors()!=0) return 1;",
     ]
     lines.extend(_ensure_statement(c.command) for c in request.set_commands)
+    for edit in request.parameter_edits:
+        pid, value = _quote(edit.parm_id), repr(edit.value)
+        lines += [
+            f'if(!ValidParm({pid})) {{ Print("PARAMETER_ERROR: invalid ID"); return 10; }}',
+            (
+                f"if({value}<GetParmLowerLimit({pid}) || {value}>GetParmUpperLimit({pid})) "
+                '{ Print("PARAMETER_ERROR: value outside limits"); return 10; }'
+            ),
+            f"SetParmVal({pid},{value});",
+        ]
     lines += [
         "Update();",
         "if(CheckErrors()!=0) return 2;",
+        'Print("OPENVSP_VERSION:"+GetVSPVersion());',
+    ]
+    for index, edit in enumerate(request.parameter_edits):
+        pid, value = _quote(edit.parm_id), repr(edit.value)
+        lines += [
+            (
+                f"if(abs(GetParmVal({pid})-{value})>1e-9*(1+abs({value}))) "
+                '{ Print("PARAMETER_ERROR: requested value did not take effect"); return 10; }'
+            ),
+            f'Print("PARAMETER_VALUE_{index}:"+formatFloat(GetParmVal({pid}),"",0,17));',
+        ]
+    lines += [
         f"SetVSP3FileName({_quote(model)});",
         f"WriteVSPFile({_quote(model)},SET_ALL);",
         "if(CheckErrors()!=0) return 3;",
@@ -92,7 +117,7 @@ def _write_script(
         a = request.analysis
         for analysis in ["VSPAEROComputeGeometry", "VSPAEROSweep"]:
             lines.append(f'SetAnalysisInputDefaults("{analysis}");')
-            values = {"GeomSet": a.thick_geom_set, "ThinGeomSet": a.thin_geom_set}
+            values = {"GeomSet": a.thick_geom_set, "ThinGeomSet": a.thin_geom_set, "UseModeFlag": 0}
             if analysis == "VSPAEROSweep":
                 values.update(
                     {
@@ -118,8 +143,11 @@ def _write_script(
                         "Ycg": a.ycg,
                         "Zcg": a.zcg,
                         "NCPU": a.ncpu,
+                        "UnsteadyType": 0,
+                        "FixedWakeFlag": int(a.fixed_wake),
                         "WakeNumIter": a.wake_iterations,
                         "NumWakeNodes": a.wake_nodes,
+                        "ForwardGMRESConvergenceFactor": a.forward_gmres_tolerance_factor,
                         "RedirectFile": str(run_dir / "solver.log"),
                     }
                 )
@@ -146,6 +174,8 @@ def _write_script(
 
 def _run_script(script: Path, log: Path, timeout: int) -> int:
     """Keep logs on failure; terminate the solver process group on POSIX timeouts."""
+    check_cancelled()
+    deadline = time.monotonic() + timeout
     with (
         log.open("wb") as stream,
         subprocess.Popen(
@@ -157,8 +187,16 @@ def _run_script(script: Path, log: Path, timeout: int) -> int:
         ) as proc,
     ):
         try:
-            return proc.wait(timeout=timeout)
-        except subprocess.TimeoutExpired:
+            while True:
+                check_cancelled()
+                remaining = deadline - time.monotonic()
+                if remaining <= 0:
+                    raise RuntimeError(f"OpenVSP timed out after {timeout}s")
+                try:
+                    return proc.wait(timeout=min(0.1, remaining))
+                except subprocess.TimeoutExpired:
+                    pass
+        except BaseException:
             if os.name == "posix":
                 try:
                     os.killpg(proc.pid, signal.SIGKILL)
@@ -167,7 +205,7 @@ def _run_script(script: Path, log: Path, timeout: int) -> int:
             else:
                 proc.kill()
             proc.wait()
-            raise RuntimeError(f"OpenVSP timed out after {timeout}s") from None
+            raise
 
 
 def _read_polar(path: Path, request: OpenVSPRequest) -> dict[str, float]:
@@ -176,12 +214,14 @@ def _read_polar(path: Path, request: OpenVSPRequest) -> dict[str, float]:
     for line in path.read_text().splitlines():
         cols = line.split()
         if cols[:3] == ["Beta", "Mach", "AoA"]:
+            if header is not None or len(set(cols)) != len(cols):
+                raise RuntimeError("Duplicate VSPAERO polar header or columns")
             header = cols
         elif header and cols:
             try:
                 vals = [float(v) for v in cols]
-            except ValueError:
-                continue
+            except ValueError as exc:
+                raise RuntimeError("Malformed VSPAERO polar row") from exc
             if len(vals) != len(header) or not all(math.isfinite(v) for v in vals):
                 raise RuntimeError("Invalid or non-finite VSPAERO polar row")
             rows.append(dict(zip(header, vals)))
@@ -204,6 +244,8 @@ def _read_polar(path: Path, request: OpenVSPRequest) -> dict[str, float]:
 
 
 def execute_openvsp(request: OpenVSPRequest, *, operation: str | None = None) -> OpenVSPResponse:
+    started = time.monotonic()
+    check_cancelled()
     operation = operation or ("run_vspaero" if request.run_vspaero else "modify")
     if operation not in {"run_vspaero", "modify", "create", "preview", "preflight"}:
         raise ValueError("Unknown OpenVSP operation")
@@ -241,6 +283,7 @@ def execute_openvsp(request: OpenVSPRequest, *, operation: str | None = None) ->
         "vspaero_binary": VSPAERO_BIN,
         "operation": operation,
         "versions": version_info(),
+        "timings": {},
     }
 
     def save_manifest():
@@ -256,19 +299,25 @@ def execute_openvsp(request: OpenVSPRequest, *, operation: str | None = None) ->
             source_hash = hashlib.sha256(snapshot.read_bytes()).hexdigest()
             manifest["input_sha256"] = source_hash
         _write_script(request, run_dir, token, operation)
+        manifest["timings"]["prepare_seconds"] = time.monotonic() - started
+        native_started = time.monotonic()
         rc = _run_script(script, log, request.timeout_seconds)
+        manifest["timings"]["native_seconds"] = time.monotonic() - native_started
+        validation_started = time.monotonic()
+        check_cancelled()
         manifest["returncode"] = rc
+        log_text = log.read_text(errors="replace")
         if rc != 0:
             detail = next(
                 (
                     s.strip()
-                    for s in log.read_text(errors="replace").splitlines()
-                    if "PREFLIGHT_ERROR:" in s
+                    for s in log_text.splitlines()
+                    if "PREFLIGHT_ERROR:" in s or "PARAMETER_ERROR:" in s
                 ),
                 "",
             )
             raise RuntimeError(f"OpenVSP exited with code {rc}. {detail}".rstrip())
-        if f"OPENVSP_MCP_SUCCESS_{token}" not in log.read_text(errors="replace"):
+        if f"OPENVSP_MCP_SUCCESS_{token}" not in log_text:
             raise RuntimeError("OpenVSP did not reach the verified script completion marker")
         model = run_dir / f"{request.case_name}.vsp3"
         if not describe_geometry(str(model)).geom_ids:
@@ -278,8 +327,25 @@ def execute_openvsp(request: OpenVSPRequest, *, operation: str | None = None) ->
         quality = {}
         warnings = []
         preflight = {}
+        effective = {}
+        parameters = {}
+        for line in log_text.splitlines():
+            if line.strip().startswith("OPENVSP_VERSION:"):
+                manifest["versions"]["openvsp_version"] = line.strip().split(":", 1)[1]
+        for index, edit in enumerate(request.parameter_edits):
+            prefix = f"PARAMETER_VALUE_{index}:"
+            values = [
+                line.strip()[len(prefix) :]
+                for line in log_text.splitlines()
+                if line.strip().startswith(prefix)
+            ]
+            if len(values) != 1:
+                raise RuntimeError("Missing parameter readback")
+            parameters[edit.parm_id] = float(values[0])
+            if not math.isclose(parameters[edit.parm_id], edit.value, rel_tol=1e-9, abs_tol=1e-9):
+                raise RuntimeError("Parameter readback mismatch")
         if request.run_vspaero or operation == "preflight":
-            text = log.read_text(errors="replace")
+            text = log_text
             if "PREFLIGHT_OK" not in text:
                 raise RuntimeError("Missing verified geometry preflight marker")
             preflight = {"status": "passed", "thick_geom_ids": [], "thin_geom_ids": []}
@@ -313,17 +379,25 @@ def execute_openvsp(request: OpenVSPRequest, *, operation: str | None = None) ->
                 if not f.is_file() or not f.stat().st_size:
                     raise RuntimeError(f"Missing or empty solver artifact: {name}")
             coefficients = _read_polar(run_dir / f"{request.case_name}.polar", request)
+            effective = read_effective_settings(run_dir / f"{request.case_name}.vspaero", request)
             result = str(run_dir / f"{request.case_name}.adb")
             quality = history_diagnostics(run_dir / f"{request.case_name}.history")
+            manifest["numerical_quality"] = quality
+            if quality["history_status"] == "invalid":
+                raise RuntimeError("Invalid numerical history; see numerical diagnostics")
         elif operation == "modify":
             # Preserve modify's in-place behavior, but replace only after validation.
-            if hashlib.sha256(source.read_bytes()).hexdigest() != source_hash:
-                raise RuntimeError("Input model changed during the run; refusing to overwrite it")
             fd, tmp = tempfile.mkstemp(prefix=".openvsp-", suffix=".vsp3", dir=source.parent)
             os.close(fd)
             try:
                 copy2(model, tmp)
-                os.replace(tmp, source)
+                with commit_lock:
+                    check_cancelled()
+                    if hashlib.sha256(source.read_bytes()).hexdigest() != source_hash:
+                        raise RuntimeError(
+                            "Input model changed during the run; refusing to overwrite it"
+                        )
+                    os.replace(tmp, source)
             finally:
                 Path(tmp).unlink(missing_ok=True)
         manifest.update(
@@ -332,6 +406,12 @@ def execute_openvsp(request: OpenVSPRequest, *, operation: str | None = None) ->
             warnings=warnings,
             preflight=preflight,
             numerical_quality=quality,
+            effective_settings=effective,
+            parameter_values=parameters,
+        )
+        manifest["timings"].update(
+            validation_seconds=time.monotonic() - validation_started,
+            total_seconds=time.monotonic() - started,
         )
         save_manifest()
         return OpenVSPResponse(
@@ -353,10 +433,17 @@ def execute_openvsp(request: OpenVSPRequest, *, operation: str | None = None) ->
             preflight=preflight,
             numerical_quality=quality,
             versions=manifest["versions"],
+            effective_settings=effective,
+            parameter_values=parameters,
+            timings=manifest["timings"],
         )
     except (OSError, RuntimeError) as exc:
         with log.open("a", encoding="utf-8") as stream:
             stream.write(f"\nopenvsp-mcp: {exc}\n")
-        manifest.update(status="failed", error=str(exc))
+        manifest.update(
+            status="cancelled" if isinstance(exc, OperationCancelled) else "failed", error=str(exc)
+        )
+        manifest["timings"]["total_seconds"] = time.monotonic() - started
         save_manifest()
-        raise RuntimeError(f"{exc}. Run artifacts: {run_dir}; log: {log}") from exc
+        error_type = OperationCancelled if isinstance(exc, OperationCancelled) else RuntimeError
+        raise error_type(f"{exc}. Run artifacts: {run_dir}; log: {log}") from exc

@@ -4,9 +4,12 @@ A maintained fork of [Three-Little-Birds/openvsp-mcp](https://github.com/Three-L
 extending MCP automation for OpenVSP and VSPAERO with geometry inspection, model
 modification, and aerodynamic analysis. The original MIT license and history are retained.
 
-**0.4.0** adds executable health checks, model creation, previews, geometry-set
-preflight, sequential sweeps, and a staged local installer. See
-[migration and verification notes](docs/maintenance.md) and the executable
+**0.5.0** aligns the native API contract and keeps MCP responsive during native
+operations. It adds typed parameter queries/edits and saved-result reads, verifies
+actual solver settings, and supports the official fixed-wake flag. See the
+[version-specific API audit](docs/api-audit-0.5.md),
+[runtime behavior](docs/runtime-0.5.md),
+[validation and measured timings](docs/validation-0.5.md), and
 [aircraft regression](examples/simple_aircraft/run_smoke.py).
 
 ## Install
@@ -64,6 +67,9 @@ All tools return structured results. All except `openvsp.health` take a nested
 | `openvsp.preview` | Export SVG and STL from a copy; preserve the source. |
 | `openvsp.preflight` | Check selected geometry sets in the loaded model and report reference/unit warnings; no solver. |
 | `openvsp.run_vspaero` | Prepare and solve one condition; validate artifacts and matching polar; preserve source. |
+| `openvsp.query` | Discover analyses, inspect their input types/defaults, or read paginated geometry parameters. |
+| `openvsp.set_parameters` | Apply typed ID/value edits in one load/update; verify limits and final readback before replacing the source. |
+| `openvsp.read_results` | Read saved coefficient subsets and bounded log tails without launching OpenVSP. |
 | `openvsp.sweep` | Solve 1–25 explicitly specified conditions sequentially; retain partial results on failure. |
 
 Create a model:
@@ -146,13 +152,14 @@ To edit, call `openvsp.modify` with `set_commands`, for example:
 ```
 
 Commands are trusted AngelScript with server-process privileges; use trusted local
-clients. Preview/preflight/solve may apply commands to their private copy. Only
-`modify` replaces the original. Read-only preservation refers to the wrapper's
+clients. Preview/preflight/solve may apply commands to their private copy.
+`modify` and `set_parameters` replace the original after validation.
+Read-only preservation refers to the wrapper's
 normal operations; arbitrary trusted script commands can perform their own I/O.
 
 ## Results and failures
 
-Each operation except health/inspection creates a unique directory under
+Model creation, editing, preview, preflight and solve create a unique directory under
 `output_dir`, or `openvsp_runs` beside the source. Creation requires `output_dir`.
 Runs preserve scripts, models, logs and `manifest.json`; operations on an existing
 model also preserve its input snapshot and hash. Solver runs retain `.vspgeom`,
@@ -182,11 +189,12 @@ run's artifacts; copy the run first when preserving evidence.
 ```sh
 python -m pytest
 ruff check .
-# Real OpenVSP/VSPAERO required; exercises all eight tools over MCP stdio:
+# Real OpenVSP/VSPAERO required; exercises all eleven tools over MCP stdio:
 python examples/simple_aircraft/run_smoke.py
 ```
 
-The real smoke creates and previews an aircraft, verifies source preservation,
+The real smoke queries native capabilities and analysis defaults, reads and edits
+parameters, verifies fixed-wake/GMRES settings, reads saved results, creates and previews an aircraft, verifies source preservation,
 checks actual geometry sets, rejects absent/empty/overlapping sets before solving,
 renames a wing, rejects an invalid parameter edit, runs one condition and an
 alpha 0/3 degree sweep. Full responses are saved in `smoke_outputs/smoke_result.json`;
@@ -197,11 +205,44 @@ verify the workflow, not accuracy, convergence or design suitability.
 Hosted CI uses no native binaries. Native smoke testing remains opt-in and must
 be repeated for each computer and binary version.
 
+## New typed operations
+
+```json
+{"request": {"kind": "analysis", "analysis_name": "VSPAEROSweep"}}
+```
+
+Use `kind: "parameters"` with `geometry_file`; optionally select `geom_id` or
+`parm_ids`, and paginate with `offset`/`limit` (default 100, maximum 200).
+`kind: "capabilities"` lists installed analyses. Listing an analysis does not
+imply that this wrapper supports running it. Analysis input descriptions are
+omitted because of an audited upstream AngelScript binding defect; see the audit.
+
+Call `openvsp.set_parameters` with `geometry_file` and
+`edits: [{"parm_id": "ID_FROM_QUERY", "value": 1.5}]`. This operation modifies
+the source after validation, like `openvsp.modify`.
+
+Call `openvsp.read_results` with a returned `manifest_file` path and optional
+`coefficient_names: ["CLtot", "CDtot"]`, `log: "solver"`, `log_tail_lines: 40`.
+(The execution response calls this path `manifest_path`.)
+
+For a single solve, set `analysis.fixed_wake: true` to select official
+`FixedWakeFlag`; the effective file must contain `WakeIters=0`.
+`wake_iterations` now accepts 3–255 and `ncpu` 1–255. Values accepted previously
+outside these native limits are rejected rather than silently clamped.
+`forward_gmres_tolerance_factor` defaults to 1 and accepts positive values up to
+1e12. Wrapper defaults remain explicit; loaded-model/native defaults are reported
+separately by query. See the audit for intentionally narrower wrapper limits.
+
+`effective_settings` reports verified solver-file fields. The request and
+`analysis_inputs` remain the requested values; preflight alone does not verify a
+solver file. `timings` reports preparation/native/validation/total seconds.
+
 ## Other interfaces
 
 Python exports include `CreateModelRequest`, `SweepRequest`, `OpenVSPRequest`,
 `VSPAeroSettings`, `create_model`, `preview_model`, `preflight_model`, `run_sweep`,
-`health_check` and `execute_openvsp`.
+`health_check`, `execute_openvsp`, `QueryRequest`, `ParameterEditRequest`,
+`ResultRequest`, `query_model`, `set_parameters` and `read_results`.
 
 HTTP MCP binds to loopback by default:
 
@@ -212,7 +253,8 @@ python -m uvicorn openvsp_mcp.fastapi_app:create_app --factory --host 127.0.0.1 
 
 REST exposes `GET /health` (200 ready, 503 unhealthy) and `POST /vsp/inspect`,
 `/vsp/create`, `/vsp/modify`, `/vsp/preview`, `/vsp/preflight`, `/vsp/run`, and
-`/vsp/sweep`. POST bodies contain the request object without the MCP wrapper.
+`/vsp/sweep`, `/vsp/query`, `/vsp/parameters`, and `/vsp/results`.
+POST bodies contain the request object without the MCP wrapper.
 No authentication is provided; these interfaces are intended for trusted local use.
 
 ## Maintenance

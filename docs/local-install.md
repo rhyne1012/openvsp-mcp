@@ -13,7 +13,7 @@ Venv paths are never moved after creation, preserving executable shebangs.
 
 ```sh
 python3 scripts/install_local.py \
-  --package /absolute/path/openvsp_mcp-0.4.0-py3-none-any.whl \
+  --package /absolute/path/openvsp_mcp-0.5.0-py3-none-any.whl \
   --runtime-root "$HOME/Library/Application Support/OpenVSP-MCP/staged"
 ```
 
