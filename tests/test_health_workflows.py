@@ -19,7 +19,7 @@ def test_missing_executables_are_unhealthy_including_http(monkeypatch, tmp_path)
     assert result.status_code == 503
     data = result.json()
     assert data["status"] == "error"
-    assert data["package_version"] == "0.4.0"
+    assert data["package_version"] == "0.5.0"
     assert len(data["package_sha256"]) == 64
     assert all(v["status"] == "error" for v in data["checks"].values())
 

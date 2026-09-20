@@ -11,3 +11,4 @@ dist/
 .DS_Store
 openvsp_runs/
 smoke_outputs/
+.local-validation/

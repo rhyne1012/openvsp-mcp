@@ -50,6 +50,12 @@ def simulator(monkeypatch):
         for ext in ["adb", "history", "vspgeom", "vspaero"]:
             model.with_suffix("." + ext).write_text("fresh output")
         model.with_suffix(".polar").write_text(behavior["polar"])
+        model.with_suffix(".vspaero").write_text(
+            "Sref = 1\nBref = 1\nCref = 1\nX_cg = 0\nY_cg = 0\nZ_cg = 0\n"
+            "Mach = .1\nAoA = 3\nBeta = 0\nVinf = 34.03\nRho = 1.225\nReCref = 2900000\n"
+            "WakeIters = 30\nNumWakeNodes = 32\nForwardGMRESConvergenceFactor = 1\n"
+            "VSP_StabilityType = 0\n"
+        )
         (run_dir / "history.csv").write_text("CL,0.233\n")
         (run_dir / "solver.log").write_text("Done\n")
         if "EXPORT_SVG" in text:

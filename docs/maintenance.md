@@ -1,3 +1,20 @@
+# API and connection improvements (0.5.0, PR candidate)
+
+- Correct native input limits; add FixedWakeFlag and GMRES mapping; explicitly
+  select geometry sets and steady mode; verify the written solver inputs.
+- Add native capability/analysis/parameter queries, typed parameter edits, and
+  bounded saved-result/log reads through MCP, Python and REST.
+- Keep MCP responsive with bounded worker execution and POSIX cancellation cleanup.
+- Reject malformed polar/history data; preserve requested versus effective values.
+- Cache immutable identity and empty-model capabilities; record phase timings.
+
+See [the pinned API audit](api-audit-0.5.md) and [runtime notes](runtime-0.5.md).
+Existing interfaces remain; formerly accepted out-of-range inputs now fail early.
+0.6.0 is reserved for expanded batch and aerodynamic derivative workflows.
+This candidate does not deploy to an active runtime or create a tag/Release.
+
+---
+
 # Workflow and health improvements (0.4.0)
 
 Baseline: fork main `f46a872a0d59b8d56cc6756323acc9074b1583af` (0.3.0).

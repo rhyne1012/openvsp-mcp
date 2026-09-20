@@ -9,6 +9,7 @@ from shutil import which
 from typing import Any
 
 from . import core
+from .runtime import OperationCancelled, check_cancelled
 from .version import version_info
 
 
@@ -20,6 +21,7 @@ def _executable(value: str) -> str:
 
 
 def health_check() -> dict[str, Any]:
+    check_cancelled()
     result = {"status": "ok", **version_info(), "checks": {}}
     for name, configured in [("openvsp", core.OPENVSP_BIN), ("vspaero", core.VSPAERO_BIN)]:
         check = {"configured_path": configured, "status": "error"}
@@ -34,6 +36,9 @@ def health_check() -> dict[str, Any]:
  if (id.length()==0 || GetNumTotalErrors()!=0) return 1;
  array<string>@ inputs=GetAnalysisInputNames("VSPAEROComputeGeometry");
  if(inputs.find("GeomSet")<0 || inputs.find("ThinGeomSet")<0) return 2;
+ array<string>@ sweep=GetAnalysisInputNames("VSPAEROSweep");
+ if(sweep.find("FixedWakeFlag")<0 || sweep.find("ForwardGMRESConvergenceFactor")<0 ||
+    sweep.find("UseModeFlag")<0 || sweep.find("UnsteadyType")<0) return 3;
  Print(GetVSPVersion()); Print("OPENVSP_HEALTH_API_OK"); return 0;
 }
 """)
@@ -58,6 +63,8 @@ def health_check() -> dict[str, Any]:
             if not match:
                 raise RuntimeError("Probe did not return a recognized version")
             check.update(status="ok", version=match[1])
+        except OperationCancelled:
+            raise
         except (OSError, RuntimeError, subprocess.TimeoutExpired) as exc:
             check["error"] = str(exc)
             result["status"] = "error"

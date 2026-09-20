@@ -1,0 +1,3 @@
+recursive-include scripts *.py
+recursive-include examples *.py *.vspscript
+recursive-include docs *.md *.json

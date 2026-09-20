@@ -11,6 +11,7 @@ from typing import Any
 from .core import execute_openvsp
 from .geometry import simple_aircraft_commands
 from .models import CreateModelRequest, OpenVSPRequest, OpenVSPResponse, SweepRequest, VSPCommand
+from .runtime import OperationCancelled, check_cancelled
 
 
 def create_model(request: CreateModelRequest) -> OpenVSPResponse:
@@ -62,6 +63,7 @@ def run_sweep(request: SweepRequest) -> dict[str, Any]:
         copy2(source, snapshot)
         manifest["input_sha256"] = hashlib.sha256(snapshot.read_bytes()).hexdigest()
         for index, condition in enumerate(request.conditions):
+            check_cancelled()
             remaining = int(deadline - time.monotonic())
             if remaining < 1:
                 raise RuntimeError("Sweep total time budget exhausted")
@@ -79,7 +81,9 @@ def run_sweep(request: SweepRequest) -> dict[str, Any]:
         manifest["status"] = "success"
         save()
     except (OSError, RuntimeError) as exc:
-        manifest.update(status="failed", error=str(exc))
+        manifest.update(
+            status="cancelled" if isinstance(exc, OperationCancelled) else "failed", error=str(exc)
+        )
         save()
         raise RuntimeError(f"Sweep failed: {exc}. Partial results: {manifest_path}") from exc
     return {"run_directory": str(batch), "manifest_path": str(manifest_path), **manifest}

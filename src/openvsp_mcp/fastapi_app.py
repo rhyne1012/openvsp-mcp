@@ -13,8 +13,14 @@ from .models import (
     OpenVSPInspectResponse,
     OpenVSPRequest,
     OpenVSPResponse,
+    ParameterEditRequest,
+    QueryRequest,
+    ResultRequest,
     SweepRequest,
 )
+from .query import query_model, set_parameters
+from .results import read_results
+from .runtime import run_async
 from .version import __version__
 from .workflows import create_model, preflight_model, preview_model, run_sweep
 
@@ -27,57 +33,78 @@ def create_app() -> FastAPI:
     )
 
     @app.post("/vsp/inspect", response_model=OpenVSPInspectResponse)
-    def inspect(request: OpenVSPGeometryRequest) -> OpenVSPInspectResponse:
+    async def inspect(request: OpenVSPGeometryRequest) -> OpenVSPInspectResponse:
         try:
-            return describe_geometry(request.geometry_file)
+            return await run_async(describe_geometry, request.geometry_file)
         except RuntimeError as exc:
             raise HTTPException(status_code=500, detail=str(exc)) from exc
 
     @app.post("/vsp/modify", response_model=OpenVSPResponse)
-    def modify(request: OpenVSPRequest) -> OpenVSPResponse:
+    async def modify(request: OpenVSPRequest) -> OpenVSPResponse:
         try:
-            return execute_openvsp(request.model_copy(update={"run_vspaero": False}))
+            return await run_async(execute_openvsp, request, operation="modify")
         except RuntimeError as exc:
             raise HTTPException(status_code=500, detail=str(exc)) from exc
 
     @app.post("/vsp/run", response_model=OpenVSPResponse)
-    def run_vspaero(request: OpenVSPRequest) -> OpenVSPResponse:
+    async def run_vspaero(request: OpenVSPRequest) -> OpenVSPResponse:
         try:
-            return execute_openvsp(request.model_copy(update={"run_vspaero": True}))
+            return await run_async(execute_openvsp, request, operation="run_vspaero")
         except RuntimeError as exc:
             raise HTTPException(status_code=500, detail=str(exc)) from exc
 
     @app.get("/health")
-    def health(response: Response) -> dict:
-        result = health_check()
+    async def health(response: Response) -> dict:
+        result = await run_async(health_check)
         response.status_code = 200 if result["status"] == "ok" else 503
         return result
 
     @app.post("/vsp/create", response_model=OpenVSPResponse)
-    def create(request: CreateModelRequest):
+    async def create(request: CreateModelRequest):
         try:
-            return create_model(request)
+            return await run_async(create_model, request)
         except RuntimeError as exc:
             raise HTTPException(status_code=500, detail=str(exc)) from exc
 
     @app.post("/vsp/preview", response_model=OpenVSPResponse)
-    def preview(request: OpenVSPRequest):
+    async def preview(request: OpenVSPRequest):
         try:
-            return preview_model(request)
+            return await run_async(preview_model, request)
         except RuntimeError as exc:
             raise HTTPException(status_code=500, detail=str(exc)) from exc
 
     @app.post("/vsp/preflight", response_model=OpenVSPResponse)
-    def preflight(request: OpenVSPRequest):
+    async def preflight(request: OpenVSPRequest):
         try:
-            return preflight_model(request)
+            return await run_async(preflight_model, request)
         except RuntimeError as exc:
             raise HTTPException(status_code=500, detail=str(exc)) from exc
 
     @app.post("/vsp/sweep")
-    def sweep(request: SweepRequest):
+    async def sweep(request: SweepRequest):
         try:
-            return run_sweep(request)
+            return await run_async(run_sweep, request)
+        except RuntimeError as exc:
+            raise HTTPException(status_code=500, detail=str(exc)) from exc
+
+    @app.post("/vsp/query")
+    async def query(request: QueryRequest):
+        try:
+            return await run_async(query_model, request)
+        except RuntimeError as exc:
+            raise HTTPException(status_code=500, detail=str(exc)) from exc
+
+    @app.post("/vsp/parameters", response_model=OpenVSPResponse)
+    async def parameters(request: ParameterEditRequest):
+        try:
+            return await run_async(set_parameters, request)
+        except RuntimeError as exc:
+            raise HTTPException(status_code=500, detail=str(exc)) from exc
+
+    @app.post("/vsp/results")
+    async def results(request: ResultRequest):
+        try:
+            return await run_async(read_results, request)
         except RuntimeError as exc:
             raise HTTPException(status_code=500, detail=str(exc)) from exc
 
