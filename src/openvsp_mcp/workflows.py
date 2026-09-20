@@ -11,7 +11,7 @@ from typing import Any
 from .core import execute_openvsp
 from .geometry import simple_aircraft_commands
 from .models import CreateModelRequest, OpenVSPRequest, OpenVSPResponse, SweepRequest, VSPCommand
-from .runtime import OperationCancelled, check_cancelled
+from .runtime import OperationCancelled, check_cancelled, deadline_scope
 
 
 def create_model(request: CreateModelRequest) -> OpenVSPResponse:
@@ -75,7 +75,8 @@ def run_sweep(request: SweepRequest) -> dict[str, Any]:
                 set_commands=request.set_commands,
                 timeout_seconds=remaining,
             )
-            response = execute_openvsp(single)
+            with deadline_scope(deadline):
+                response = execute_openvsp(single)
             manifest["results"].append(response.model_dump())
             save()
         manifest["status"] = "success"

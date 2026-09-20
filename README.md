@@ -4,13 +4,13 @@ A maintained fork of [Three-Little-Birds/openvsp-mcp](https://github.com/Three-L
 extending MCP automation for OpenVSP and VSPAERO with geometry inspection, model
 modification, and aerodynamic analysis. The original MIT license and history are retained.
 
-**0.5.0** aligns the native API contract and keeps MCP responsive during native
-operations. It adds typed parameter queries/edits and saved-result reads, verifies
-actual solver settings, and supports the official fixed-wake flag. See the
-[version-specific API audit](docs/api-audit-0.5.md),
-[runtime behavior](docs/runtime-0.5.md),
-[validation and measured timings](docs/validation-0.5.md), and
-[aircraft regression](examples/simple_aircraft/run_smoke.py).
+**0.6.0** adds durable multi-case analysis with bounded parallel execution,
+shared CPU admission, progress/cancellation, verified explicit resume and CSV/JSON
+exports. Each case can change conditions and typed parameters on a private model
+copy. See the [batch guide](docs/batch-0.6.md), [native batch regression](examples/simple_aircraft/batch_smoke.py)
+and [reproducible throughput/RSS benchmark](scripts/benchmark_batch.py).
+Measured results and coverage limits are in [0.6 validation](docs/validation-0.6.md).
+The [0.5 API audit](docs/api-audit-0.5.md) and existing single-case workflows remain applicable.
 
 ## Install
 
@@ -71,6 +71,18 @@ All tools return structured results. All except `openvsp.health` take a nested
 | `openvsp.set_parameters` | Apply typed ID/value edits in one load/update; verify limits and final readback before replacing the source. |
 | `openvsp.read_results` | Read saved coefficient subsets and bounded log tails without launching OpenVSP. |
 | `openvsp.sweep` | Solve 1–25 explicitly specified conditions sequentially; retain partial results on failure. |
+| `openvsp.batch_submit` | Submit independent cases with per-case parameters, parallel-job and CPU limits. |
+| `openvsp.batch_status` | Read paginated progress and detect interrupted batches after restart. |
+| `openvsp.batch_cancel` | Cancel selected cases or the whole batch. |
+| `openvsp.batch_resume` | Explicitly retry incomplete cases after verifying inputs and successful artifacts. |
+| `openvsp.batch_export` | Export saved case results and metadata as CSV/JSON. |
+
+Batch defaults are sequential, four CPU threads per case, and a four-thread
+batch budget. Set `max_parallel_jobs` and each case's `analysis.ncpu` together.
+`OPENVSP_CPU_BUDGET` limits shared native work in one server; by default it is the
+larger of four and the reported logical CPU count. Requests exceeding this budget
+are rejected. Multiple server processes do not share this limit. See the
+[batch guide](docs/batch-0.6.md) for lifecycle, resume and resource semantics.
 
 Create a model:
 
@@ -189,8 +201,9 @@ run's artifacts; copy the run first when preserving evidence.
 ```sh
 python -m pytest
 ruff check .
-# Real OpenVSP/VSPAERO required; exercises all eleven tools over MCP stdio:
+# Real OpenVSP/VSPAERO required; exercise the legacy and batch tools over MCP stdio:
 python examples/simple_aircraft/run_smoke.py
+python examples/simple_aircraft/batch_smoke.py
 ```
 
 The real smoke queries native capabilities and analysis defaults, reads and edits
@@ -254,6 +267,8 @@ python -m uvicorn openvsp_mcp.fastapi_app:create_app --factory --host 127.0.0.1 
 REST exposes `GET /health` (200 ready, 503 unhealthy) and `POST /vsp/inspect`,
 `/vsp/create`, `/vsp/modify`, `/vsp/preview`, `/vsp/preflight`, `/vsp/run`, and
 `/vsp/sweep`, `/vsp/query`, `/vsp/parameters`, and `/vsp/results`.
+Batch routes are `POST /vsp/batch/submit`, `/vsp/batch/status`, `/vsp/batch/cancel`,
+`/vsp/batch/resume` and `/vsp/batch/export`.
 POST bodies contain the request object without the MCP wrapper.
 No authentication is provided; these interfaces are intended for trusted local use.
 

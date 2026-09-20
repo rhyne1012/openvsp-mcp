@@ -4,10 +4,23 @@ from __future__ import annotations
 
 from fastapi import FastAPI, HTTPException, Response
 
+from .batch import (
+    batch_lifespan,
+    batch_status,
+    cancel_batch,
+    export_batch,
+    resume_batch,
+    submit_batch,
+)
 from .core import execute_openvsp
 from .describe import describe_geometry
 from .health import health_check
 from .models import (
+    BatchCancelRequest,
+    BatchExportRequest,
+    BatchRequest,
+    BatchResumeRequest,
+    BatchStatusRequest,
     CreateModelRequest,
     OpenVSPGeometryRequest,
     OpenVSPInspectResponse,
@@ -20,7 +33,7 @@ from .models import (
 )
 from .query import query_model, set_parameters
 from .results import read_results
-from .runtime import run_async
+from .runtime import run_async, run_control
 from .version import __version__
 from .workflows import create_model, preflight_model, preview_model, run_sweep
 
@@ -30,6 +43,7 @@ def create_app() -> FastAPI:
         title="OpenVSP MCP Service",
         version=__version__,
         description="Inspect and automate OpenVSP geometry edits, with optional VSPAero runs.",
+        lifespan=batch_lifespan,
     )
 
     @app.post("/vsp/inspect", response_model=OpenVSPInspectResponse)
@@ -107,6 +121,32 @@ def create_app() -> FastAPI:
             return await run_async(read_results, request)
         except RuntimeError as exc:
             raise HTTPException(status_code=500, detail=str(exc)) from exc
+
+    async def control(function, request):
+        try:
+            return await run_control(function, request)
+        except RuntimeError as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+    @app.post("/vsp/batch/submit")
+    async def batch_submit(request: BatchRequest):
+        return await control(submit_batch, request)
+
+    @app.post("/vsp/batch/status")
+    async def status(request: BatchStatusRequest):
+        return await control(batch_status, request)
+
+    @app.post("/vsp/batch/cancel")
+    async def cancel(request: BatchCancelRequest):
+        return await control(cancel_batch, request)
+
+    @app.post("/vsp/batch/resume")
+    async def resume(request: BatchResumeRequest):
+        return await control(resume_batch, request)
+
+    @app.post("/vsp/batch/export")
+    async def export(request: BatchExportRequest):
+        return await control(export_batch, request)
 
     return app
 

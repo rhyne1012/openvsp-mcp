@@ -6,6 +6,7 @@ import hashlib
 import json
 import math
 import os
+import re
 import signal
 import subprocess
 import tempfile
@@ -18,7 +19,13 @@ from .describe import describe_geometry
 from .geometry import preflight_commands
 from .models import OpenVSPRequest, OpenVSPResponse
 from .quality import history_diagnostics
-from .runtime import OperationCancelled, check_cancelled, commit_lock
+from .runtime import (
+    OperationCancelled,
+    check_cancelled,
+    commit_lock,
+    cpu_allocation,
+    observe_process,
+)
 from .settings import read_effective_settings
 from .version import version_info
 
@@ -187,6 +194,7 @@ def _run_script(script: Path, log: Path, timeout: int) -> int:
         ) as proc,
     ):
         try:
+            observe_process(proc.pid)
             while True:
                 check_cancelled()
                 remaining = deadline - time.monotonic()
@@ -206,6 +214,8 @@ def _run_script(script: Path, log: Path, timeout: int) -> int:
                 proc.kill()
             proc.wait()
             raise
+        finally:
+            observe_process(None)
 
 
 def _read_polar(path: Path, request: OpenVSPRequest) -> dict[str, float]:
@@ -241,6 +251,23 @@ def _read_polar(path: Path, request: OpenVSPRequest) -> dict[str, float]:
         if name not in row or not math.isclose(row[name], value, rel_tol=1e-7, abs_tol=1e-8):
             raise RuntimeError(f"Flight condition mismatch for {name}")
     return row
+
+
+def _solver_runtime(path: Path) -> tuple[str | None, int | None]:
+    version, threads = None, None
+    with path.open(errors="replace") as stream:
+        for index, line in enumerate(stream):
+            if index >= 256:
+                break
+            match = re.search(r"VSPAERO\s+v\.(\d+\.\d+\.\d+)", line)
+            if match:
+                version = match[1]
+            match = re.search(r"NumberOfThreads_:\s*(\d+)", line)
+            if match:
+                threads = int(match[1])
+            if "Single threaded build." in line:
+                threads = 1
+    return version, threads
 
 
 def execute_openvsp(request: OpenVSPRequest, *, operation: str | None = None) -> OpenVSPResponse:
@@ -300,8 +327,11 @@ def execute_openvsp(request: OpenVSPRequest, *, operation: str | None = None) ->
             manifest["input_sha256"] = source_hash
         _write_script(request, run_dir, token, operation)
         manifest["timings"]["prepare_seconds"] = time.monotonic() - started
-        native_started = time.monotonic()
-        rc = _run_script(script, log, request.timeout_seconds)
+        resource_started = time.monotonic()
+        with cpu_allocation(request.analysis.ncpu if request.run_vspaero else 1):
+            manifest["timings"]["resource_wait_seconds"] = time.monotonic() - resource_started
+            native_started = time.monotonic()
+            rc = _run_script(script, log, request.timeout_seconds)
         manifest["timings"]["native_seconds"] = time.monotonic() - native_started
         validation_started = time.monotonic()
         check_cancelled()
@@ -380,6 +410,15 @@ def execute_openvsp(request: OpenVSPRequest, *, operation: str | None = None) ->
                     raise RuntimeError(f"Missing or empty solver artifact: {name}")
             coefficients = _read_polar(run_dir / f"{request.case_name}.polar", request)
             effective = read_effective_settings(run_dir / f"{request.case_name}.vspaero", request)
+            solver_version, threads = _solver_runtime(run_dir / "solver.log")
+            manifest["versions"]["vspaero_version"] = solver_version
+            effective["cpu_threads"] = {
+                "requested": request.analysis.ncpu,
+                "observed": threads,
+                "status": "unavailable" if threads is None else "verified",
+            }
+            if threads is not None and threads != request.analysis.ncpu:
+                raise RuntimeError("Observed solver thread count differs from requested ncpu")
             result = str(run_dir / f"{request.case_name}.adb")
             quality = history_diagnostics(run_dir / f"{request.case_name}.history")
             manifest["numerical_quality"] = quality

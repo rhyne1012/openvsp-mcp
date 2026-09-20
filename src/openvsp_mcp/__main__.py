@@ -9,6 +9,7 @@ import sys
 
 from mcp.server.fastmcp import FastMCP
 
+from .batch import batch_lifespan
 from .health import health_check
 from .tool import build_tool
 from .version import __version__, version_info
@@ -78,7 +79,7 @@ def main(argv: list[str] | None = None) -> int:
     port = args.port or (int(port_env) if port_env else 8000)
     mount_path = args.path or path_env or "/mcp"
 
-    app = FastMCP(SERVICE_NAME, SERVICE_DESCRIPTION)
+    app = FastMCP(SERVICE_NAME, SERVICE_DESCRIPTION, lifespan=batch_lifespan)
     # FastMCP 1.x does not expose a version constructor argument.
     app._mcp_server.version = __version__
     build_tool(app)

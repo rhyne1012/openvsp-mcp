@@ -1,0 +1,120 @@
+{
+  "package_version": "0.6.0",
+  "platform": "Darwin",
+  "architecture": "arm64",
+  "python": "3.12.14",
+  "mcp_sdk": "1.30.0",
+  "openvsp_version": "3.51.3",
+  "vspaero_version": "7.2.2",
+  "model": "bundled public rectangular wing",
+  "cases_per_sample": 4,
+  "cpu_budget": 4,
+  "scope": "End-to-end native batch throughput. RSS sums server/descendant processes every 50 ms; shared pages can be double-counted and short peaks missed. No private inputs. No universal speedup or aerodynamic accuracy claim.",
+  "coefficient_tolerance": {
+    "relative": 1e-06,
+    "absolute": 1e-08
+  },
+  "samples": [
+    {
+      "parallel_jobs": 1,
+      "threads_per_job": 4,
+      "sample": 1,
+      "wall_seconds": 20.561588874959853,
+      "peak_sampled_rss_mib": 147.78125,
+      "memory_samples": 320,
+      "max_abs_coefficient_difference": 0
+    },
+    {
+      "parallel_jobs": 2,
+      "threads_per_job": 2,
+      "sample": 1,
+      "wall_seconds": 10.322681583988015,
+      "peak_sampled_rss_mib": 232.96875,
+      "memory_samples": 162,
+      "max_abs_coefficient_difference": 0
+    },
+    {
+      "parallel_jobs": 4,
+      "threads_per_job": 1,
+      "sample": 1,
+      "wall_seconds": 5.202674708038103,
+      "peak_sampled_rss_mib": 391.140625,
+      "memory_samples": 82,
+      "max_abs_coefficient_difference": 0
+    },
+    {
+      "parallel_jobs": 2,
+      "threads_per_job": 2,
+      "sample": 2,
+      "wall_seconds": 10.329080791969318,
+      "peak_sampled_rss_mib": 223.421875,
+      "memory_samples": 163,
+      "max_abs_coefficient_difference": 0
+    },
+    {
+      "parallel_jobs": 4,
+      "threads_per_job": 1,
+      "sample": 2,
+      "wall_seconds": 5.1872046669595875,
+      "peak_sampled_rss_mib": 396.71875,
+      "memory_samples": 82,
+      "max_abs_coefficient_difference": 0
+    },
+    {
+      "parallel_jobs": 1,
+      "threads_per_job": 4,
+      "sample": 2,
+      "wall_seconds": 20.557614833000116,
+      "peak_sampled_rss_mib": 149.359375,
+      "memory_samples": 322,
+      "max_abs_coefficient_difference": 0
+    },
+    {
+      "parallel_jobs": 4,
+      "threads_per_job": 1,
+      "sample": 3,
+      "wall_seconds": 5.196216750016902,
+      "peak_sampled_rss_mib": 404.453125,
+      "memory_samples": 82,
+      "max_abs_coefficient_difference": 0
+    },
+    {
+      "parallel_jobs": 1,
+      "threads_per_job": 4,
+      "sample": 3,
+      "wall_seconds": 20.588647334021516,
+      "peak_sampled_rss_mib": 144.078125,
+      "memory_samples": 321,
+      "max_abs_coefficient_difference": 0
+    },
+    {
+      "parallel_jobs": 2,
+      "threads_per_job": 2,
+      "sample": 3,
+      "wall_seconds": 10.264168499968946,
+      "peak_sampled_rss_mib": 223.03125,
+      "memory_samples": 161,
+      "max_abs_coefficient_difference": 0
+    }
+  ],
+  "summary": [
+    {
+      "parallel_jobs": 1,
+      "threads_per_job": 4,
+      "median_wall_seconds": 20.561588874959853,
+      "median_peak_sampled_rss_mib": 147.78125
+    },
+    {
+      "parallel_jobs": 2,
+      "threads_per_job": 2,
+      "median_wall_seconds": 10.322681583988015,
+      "median_peak_sampled_rss_mib": 223.421875
+    },
+    {
+      "parallel_jobs": 4,
+      "threads_per_job": 1,
+      "median_wall_seconds": 5.196216750016902,
+      "median_peak_sampled_rss_mib": 396.71875
+    }
+  ]
+}

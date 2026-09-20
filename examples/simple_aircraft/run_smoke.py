@@ -1,4 +1,4 @@
-"""Exercise all eleven tools and real VSPAERO through MCP stdio (opt-in)."""
+"""Exercise the eleven legacy tools; batch_smoke.py covers the five batch tools."""
 
 from __future__ import annotations
 
@@ -51,6 +51,11 @@ async def main() -> None:
                     "query",
                     "set_parameters",
                     "read_results",
+                    "batch_submit",
+                    "batch_status",
+                    "batch_cancel",
+                    "batch_resume",
+                    "batch_export",
                 ]
             }
 
