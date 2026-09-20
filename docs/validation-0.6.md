@@ -8,7 +8,7 @@ models/results.
 
 ## Regression coverage
 
-- Ruff and 101 automated tests pass. New tests cover aggregate CPU admission
+- Ruff and 102 automated tests pass. New tests cover aggregate CPU admission
   across batches/direct work, failure policies, selected-case and whole-batch
   cancellation, explicit resume without replaying successful cases, pagination,
   CSV/JSON metadata, and REST lifecycle cleanup.
@@ -17,6 +17,7 @@ models/results.
   live native PIDs. Mid-batch snapshot changes prevent subsequent launches.
   Moving a batch directory is rejected, and CPU admission preserves the legacy
   sweep's total-time deadline.
+  A completion-during-status-read regression prevents false interruption reports.
 - A real MCP stdio subprocess test submits work, keeps ping responsive, cancels
   the native process, reconnects through a fresh server, resumes the batch, and
   verifies shutdown cancellation. The existing POSIX parent/child cleanup test

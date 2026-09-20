@@ -325,6 +325,28 @@ def test_resume_finalizes_interrupted_job_with_all_cases_saved(runner):
     assert len(calls) == 1
 
 
+def test_completion_during_status_read_is_not_reported_as_interruption(runner, monkeypatch):
+    submit, _, _, delay, _, _ = runner
+    delay[0] = 0.2
+    directory = submit(count=1)
+    load = batch._load
+
+    def slow_read(root):
+        snapshot = load(root)
+        if snapshot["status"] == "running":
+            deadline = time.monotonic() + 3
+            while load(root)["status"] == "running" and time.monotonic() < deadline:
+                time.sleep(0.01)
+            assert load(root)["status"] == "success"
+        return snapshot
+
+    # Simulate a read overlapping final manifest replacement and lock release.
+    monkeypatch.setattr(batch, "_load", slow_read)
+    status = batch.batch_status(BatchStatusRequest(batch_directory=directory))
+    assert status["status"] != "interrupted"
+    assert wait_done(directory)["status"] == "success"
+
+
 @pytest.mark.parametrize(
     "contents,expected",
     [

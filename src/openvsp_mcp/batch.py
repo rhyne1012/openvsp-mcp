@@ -96,7 +96,7 @@ class _FileLock:
                 msvcrt.locking(self.stream.fileno(), msvcrt.LK_NBLCK, 1)
         except OSError as exc:
             self.stream.close()
-            raise RuntimeError("Batch is already owned by another active runner") from exc
+            raise RuntimeError("Batch is already owned by another active runner or reader") from exc
 
     def close(self):
         self.stream.close()
@@ -405,8 +405,21 @@ def submit_batch(request: BatchRequest) -> dict:
 
 def batch_status(request: BatchStatusRequest) -> dict:
     directory = Path(request.batch_directory).expanduser().resolve()
-    data = _load(directory)
-    active = _owned(directory)
+    ownership = None
+    try:
+        try:
+            ownership = _FileLock(directory)
+        except RuntimeError:
+            pass
+        # Hold an idle directory's lock while reading. Otherwise a runner can
+        # finalize between reading "running" and probing an already released lock.
+        data = _load(directory)
+        active = ownership is None
+    except OSError as exc:
+        raise RuntimeError(f"Cannot inspect batch directory: {exc}") from exc
+    finally:
+        if ownership:
+            ownership.close()
     status = "interrupted" if data["status"] == "running" and not active else data["status"]
     counts = {
         key: sum(r["status"] == key for r in data["cases"]) for key in sorted(_ACTIVE | _TERMINAL)
