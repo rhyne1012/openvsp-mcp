@@ -1,4 +1,25 @@
-# API and connection improvements (0.5.0, PR candidate)
+# Multi-case analysis and CPU allocation (0.6.0)
+
+- Add five batch tools for submit, status, cancel, explicit resume and CSV/JSON
+  export; preserve the 11 existing tools and sequential sweep.
+- Isolate each case's typed parameter edits and flight/solver settings; share a
+  process-local CPU budget across batch and direct native operations.
+- Persist atomic manifests, OS runner ownership, attempt history and original
+  successful artifacts. Resume verifies source/snapshot, configuration, package,
+  executable identities and saved successful output hashes.
+- Support stop/continue on case failure, selected-case cancellation and normal
+  server-shutdown cleanup. No automatic retry after restart or disconnection.
+- Include two public native smoke models and a reproducible 1×4/2×2/4×1
+  throughput/RSS comparison with coefficient agreement and thread-count checks.
+
+See the [batch guide](batch-0.6.md). `OPENVSP_CPU_BUDGET` is a new per-process
+admission limit; oversized native requests now fail with configuration guidance.
+Sensitivity/control-effectiveness calculations remain a separately validated
+follow-up. This change does not publish a Release or update an active runtime.
+
+---
+
+# API and connection improvements (0.5.0)
 
 - Correct native input limits; add FixedWakeFlag and GMRES mapping; explicitly
   select geometry sets and steady mode; verify the written solver inputs.
@@ -10,8 +31,9 @@
 
 See [the pinned API audit](api-audit-0.5.md) and [runtime notes](runtime-0.5.md).
 Existing interfaces remain; formerly accepted out-of-range inputs now fail early.
-0.6.0 is reserved for expanded batch and aerodynamic derivative workflows.
-This candidate does not deploy to an active runtime or create a tag/Release.
+Expanded batch execution follows in 0.6.0; aerodynamic derivatives remain a
+separate follow-up. Merging this version did not deploy an active runtime or
+create a tag/Release.
 
 ---
 

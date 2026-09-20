@@ -9,7 +9,7 @@ from shutil import which
 from typing import Any
 
 from . import core
-from .runtime import OperationCancelled, check_cancelled
+from .runtime import OperationCancelled, check_cancelled, cpu_pool
 from .version import version_info
 
 
@@ -23,6 +23,10 @@ def _executable(value: str) -> str:
 def health_check() -> dict[str, Any]:
     check_cancelled()
     result = {"status": "ok", **version_info(), "checks": {}}
+    result["resources"] = {
+        "server_cpu_budget": cpu_pool.capacity,
+        "scope": "Per-process native operation admission; not a machine-wide CPU quota",
+    }
     for name, configured in [("openvsp", core.OPENVSP_BIN), ("vspaero", core.VSPAERO_BIN)]:
         check = {"configured_path": configured, "status": "error"}
         try:
