@@ -111,19 +111,35 @@ def test_invalid_batch_contract(change):
         BatchRequest(geometry_file="unused", **change)
 
 
-def test_resource_budget_is_shared_across_batches_and_direct_work(runner):
+def test_resource_budget_is_shared_across_batches_and_direct_work(runner, monkeypatch):
     submit, calls, _, _, source, pool = runner
+    entered, release = threading.Event(), threading.Event()
+    admitted = []
+    solve = batch.core.execute_openvsp
+
+    def gated_solve(request, **kwargs):
+        admitted.append(request.case_name)
+        entered.set()
+        assert release.wait(10), "Test did not release the admitted solver"
+        return solve(request, **kwargs)
+
+    monkeypatch.setattr(batch.core, "execute_openvsp", gated_solve)
     # A direct operation reserves half the budget while two batches compete.
-    with runtime.cpu_allocation(2):
-        first, second = submit(), submit()
-        time.sleep(0.05)
-        assert pool.used == 4
-        assert len(calls) == 1
+    # Wait for actual solver admission and hold it until the assertions finish.
+    try:
+        with runtime.cpu_allocation(2):
+            first, second = submit(), submit()
+            assert entered.wait(10), "No batch solver was admitted"
+            assert pool.used == 4
+            assert len(admitted) == 1
+    finally:
+        release.set()
     for directory in [first, second]:
         status = wait_done(directory)
         assert status["status"] == "success" and status["completed"] == 4
         assert status["peak_reserved_threads"] <= 4
     assert pool.peak == 4
+    assert len(calls) == 8
     assert source.read_text() == MODEL
 
 
