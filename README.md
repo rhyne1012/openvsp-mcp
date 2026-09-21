@@ -4,7 +4,12 @@ A maintained fork of [Three-Little-Birds/openvsp-mcp](https://github.com/Three-L
 extending MCP automation for OpenVSP and VSPAERO with geometry inspection, model
 modification, and aerodynamic analysis. The original MIT license and history are retained.
 
-**0.6.0** adds durable multi-case analysis with bounded parallel execution,
+**0.7.0** improves all 16 tool descriptions, parameter/output-field documentation
+and MCP annotations without changing tool names, input/output structures or
+OpenVSP/VSPAERO execution. Package identity changes as with any source update;
+resume old batches with their original runtime. See [0.7 metadata notes](docs/metadata-0.7.md).
+
+**0.6.0** added durable multi-case analysis with bounded parallel execution,
 shared CPU admission, progress/cancellation, verified explicit resume and CSV/JSON
 exports. Each case can change conditions and typed parameters on a private model
 copy. See the [batch guide](docs/batch-0.6.md), [native batch regression](examples/simple_aircraft/batch_smoke.py)
@@ -57,6 +62,9 @@ Start with `openvsp-mcp` or `python -m openvsp_mcp` (stdio by default). Configur
 the client with that computer's absolute Python path and binary environment values.
 All tools return structured results. All except `openvsp.health` take a nested
 `request` object; health takes `{}`.
+Descriptions and nested field documentation are available through `tools/list`.
+Annotations account for temporary files, batch locks and trusted script I/O;
+preserving a source model does not mean an operation writes no files.
 
 | Tool | Behavior |
 | --- | --- |
@@ -72,7 +80,7 @@ All tools return structured results. All except `openvsp.health` take a nested
 | `openvsp.read_results` | Read saved coefficient subsets and bounded log tails without launching OpenVSP. |
 | `openvsp.sweep` | Solve 1–25 explicitly specified conditions sequentially; retain partial results on failure. |
 | `openvsp.batch_submit` | Submit independent cases with per-case parameters, parallel-job and CPU limits. |
-| `openvsp.batch_status` | Read paginated progress and detect interrupted batches after restart. |
+| `openvsp.batch_status` | Read paginated progress and detect interrupted batches using an ownership lock; no solver or manifest rewrite. |
 | `openvsp.batch_cancel` | Cancel selected cases or the whole batch. |
 | `openvsp.batch_resume` | Explicitly retry incomplete cases after verifying inputs and successful artifacts. |
 | `openvsp.batch_export` | Export saved case results and metadata as CSV/JSON. |
