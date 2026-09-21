@@ -1,8 +1,14 @@
-# openvsp-mcp — OpenVSP and VSPAERO through MCP
+# OpenVSP MCP (Maintained Fork)
 
-A maintained fork of [Three-Little-Birds/openvsp-mcp](https://github.com/Three-Little-Birds/openvsp-mcp),
-extending MCP automation for OpenVSP and VSPAERO with geometry inspection, model
-modification, and aerodynamic analysis. The original MIT license and history are retained.
+Maintained fork of [Three-Little-Birds/openvsp-mcp](https://github.com/Three-Little-Birds/openvsp-mcp).
+Adds OpenVSP geometry inspection, typed parameter editing, SVG/STL previews,
+validated VSPAERO analysis, and durable parallel batches with progress,
+cancellation, resume, and CSV/JSON export.
+
+This fork is maintained by [rhyne1012](https://github.com/rhyne1012) and is not an
+official OpenVSP or NASA project. Original project credit belongs to Three Little
+Birds; the original [MIT license](LICENSE), copyright notice, and Git history are
+retained. The repository and Python distribution name remain `openvsp-mcp`.
 
 **0.6.0** adds durable multi-case analysis with bounded parallel execution,
 shared CPU admission, progress/cancellation, verified explicit resume and CSV/JSON
