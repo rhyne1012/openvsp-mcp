@@ -27,7 +27,7 @@ def test_stdio_inspection_validation_and_error_response(tmp_path):
             ClientSession(read, write) as session,
         ):
             initialized = await session.initialize()
-            assert initialized.serverInfo.version == "0.6.0"
+            assert initialized.serverInfo.version == "0.7.0"
             tools = {t.name: t for t in (await session.list_tools()).tools}
             assert set(tools) == {
                 "openvsp.inspect",
@@ -49,6 +49,16 @@ def test_stdio_inspection_validation_and_error_response(tmp_path):
             }
             assert "analysis" in json.dumps(tools["openvsp.run_vspaero"].inputSchema)
             assert all(tool.outputSchema for tool in tools.values())
+            assert all(tool.description and tool.annotations for tool in tools.values())
+            assert tools["openvsp.inspect"].annotations.readOnlyHint is True
+            assert tools["openvsp.modify"].annotations.destructiveHint is True
+            assert tools["openvsp.batch_status"].annotations.readOnlyHint is False
+            solve_schema = tools["openvsp.run_vspaero"].inputSchema
+            assert solve_schema["properties"]["request"]["description"]
+            assert (
+                "degrees"
+                in solve_schema["$defs"]["VSPAeroSettings"]["properties"]["alpha"]["description"]
+            )
             health = await session.call_tool("openvsp.health", {})
             assert health.structuredContent["status"] == "error"
             assert health.structuredContent["package_version"] == initialized.serverInfo.version

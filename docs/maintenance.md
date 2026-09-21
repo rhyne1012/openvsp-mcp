@@ -1,3 +1,19 @@
+# Tool metadata and schema documentation (0.7.0)
+
+- Expand descriptions for the existing 16 tools with selection guidance, side
+  effects, artifacts and sibling boundaries. Document the existing nested request
+  fields, units, defaults and limits; retain every validation and serialization rule.
+- Add MCP annotations based on actual script, process, file and job-state effects.
+  Add descriptions to already typed response fields without tightening dynamic outputs.
+- Preserve native commands, geometry/result handling, CPU/timeout/retry behavior,
+  dependencies, tool names and count. The existing package-identity check remains:
+  use the original runtime to resume batches created before this update.
+
+See [metadata details and verification](metadata-0.7.md). This source version update
+does not itself switch any installed MCP runtime or create a GitHub Release.
+
+---
+
 # Multi-case analysis and CPU allocation (0.6.0)
 
 - Add five batch tools for submit, status, cancel, explicit resume and CSV/JSON

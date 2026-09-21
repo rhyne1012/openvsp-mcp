@@ -1,0 +1,70 @@
+{
+  "baseline_commit": "42d792b8777cd2dd9b32181a47e717ba4f963b52",
+  "normalization": "Remove description keys only; canonical JSON uses sorted keys and compact separators.",
+  "tools": {
+    "openvsp.health": {
+      "input_sha256": "fbe31b8474a6964ddf9999d6e15f772fd214c708b23d4cf587535d3fcb707456",
+      "output_sha256": "29f4dbc85634aafe196028db86a228451b3fba23c84aaadc8dc56ac2f5114771"
+    },
+    "openvsp.create_model": {
+      "input_sha256": "b5d39cd26b4e027b68408a4f521ce6f1744355a8cc90da7662cb5d51d351d2d9",
+      "output_sha256": "f6ad9463ff11de8304ca96e51c8755a129ff9035becdf23476fe19aa288d37de"
+    },
+    "openvsp.inspect": {
+      "input_sha256": "766562c315d4b8ac8813afeaaaf2328fce10db43eb58014743bd965fadce137e",
+      "output_sha256": "0018e8029da8f0399d93fe6797ddef6e6a6157480f7164abadc7a4d7b31d35fa"
+    },
+    "openvsp.modify": {
+      "input_sha256": "c117fdb4aa23c7c2b16c022f442f7e74a466d4d5c2a15d3bc5957d40215e650b",
+      "output_sha256": "f6ad9463ff11de8304ca96e51c8755a129ff9035becdf23476fe19aa288d37de"
+    },
+    "openvsp.preview": {
+      "input_sha256": "57eae23aa12a44d31cedd9023de0be5526911f0d4c051f1cd90c9aa319315b15",
+      "output_sha256": "f6ad9463ff11de8304ca96e51c8755a129ff9035becdf23476fe19aa288d37de"
+    },
+    "openvsp.preflight": {
+      "input_sha256": "d331ddffe5211e7b59f17827cb855993d29c8560914d2dfc9ea8b56e291fa8d7",
+      "output_sha256": "f6ad9463ff11de8304ca96e51c8755a129ff9035becdf23476fe19aa288d37de"
+    },
+    "openvsp.run_vspaero": {
+      "input_sha256": "2fe31a66db84b68cf954ed19c69002f119f71ab2988524cb402b0e29d10c1bf6",
+      "output_sha256": "f6ad9463ff11de8304ca96e51c8755a129ff9035becdf23476fe19aa288d37de"
+    },
+    "openvsp.sweep": {
+      "input_sha256": "9c742c494f64a070ec3c2addf3bba92887ce3f870113bed80651f122bdbee18f",
+      "output_sha256": "773cc59051ee34c057d990584024f2336f55b31100f6340ab1a750d3889677af"
+    },
+    "openvsp.query": {
+      "input_sha256": "64a6731240faa5c4028a787a1dae979acc5112ba1ffbac32df7a01e36037e121",
+      "output_sha256": "69c9a8d34619e95952abce5f266fcf98b760c92b971025e3ec2fad29aa5680b9"
+    },
+    "openvsp.set_parameters": {
+      "input_sha256": "5bba586743e24544ddc1621e89ae6d64cf9ca6e894b6a1389fed04f06ff245ce",
+      "output_sha256": "f6ad9463ff11de8304ca96e51c8755a129ff9035becdf23476fe19aa288d37de"
+    },
+    "openvsp.read_results": {
+      "input_sha256": "1bfac31af2ab7ee99957d99ce9a6a6a1bbad7ee2b89e3ef1ccc445ffff8da4c4",
+      "output_sha256": "b9c35e89bf7911e47c3bc6d50e82dd62f81fca800cac73c987514eb6ee0821bd"
+    },
+    "openvsp.batch_submit": {
+      "input_sha256": "50b6c9d1e6008c977feb070b5579ac4d5511982a4a0929af0f90ebce87142cec",
+      "output_sha256": "968f479381c08f85b4966663882c4dabcbb29e3e79fb9187d447e39885b8dfb7"
+    },
+    "openvsp.batch_status": {
+      "input_sha256": "dc69dc8956229a37fdbed3d72001950ddd68794aadaafee3e414eeb4e952430a",
+      "output_sha256": "8ee1b0aa3a1e684650fcee8d4bb43ab355512f78721d9f1a76fcba0493949077"
+    },
+    "openvsp.batch_cancel": {
+      "input_sha256": "609fc2e38ff516abd3ef74ac4fa8dcaf86ff3cd550a49b7c2733866082af53c2",
+      "output_sha256": "d169ffa90d1f9f8cd8dbc1e974481cc8ea21250816c4f1f5e2e532194f089662"
+    },
+    "openvsp.batch_resume": {
+      "input_sha256": "f4ed3e6b8fce954cccb4b71d0ac8b1f5e4c85b6e30a4261dad9ef3f2c5e475d2",
+      "output_sha256": "0412b62d286a48f013933a58cf7ddd3d608f16fd4da7a5f1cfd6313b5a3542a7"
+    },
+    "openvsp.batch_export": {
+      "input_sha256": "1794fc4debbdf040497450b75e71dc0bee9f2506d61e9dd63354399312a50151",
+      "output_sha256": "565551bbe3da1e7ed66e4c1cc46f9e0125122ef3853910ef93d144906263a6de"
+    }
+  }
+}
