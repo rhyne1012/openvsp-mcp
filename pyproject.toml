@@ -1,8 +1,9 @@
 [project]
 name = "openvsp-mcp"
 version = "0.6.0"
-description = "Domain-neutral MCP helpers for OpenVSP and VSPAero automation"
+description = "Maintained fork of Three-Little-Birds/openvsp-mcp with OpenVSP geometry automation and durable parallel VSPAERO analysis"
 authors = [{ name = "OpenVSP MCP Maintainers" }]
+maintainers = [{ name = "rhyne1012" }]
 readme = "README.md"
 license = { file = "LICENSE" }
 requires-python = ">=3.10"
@@ -24,6 +25,8 @@ dev = [
 [project.urls]
 Homepage = "https://github.com/rhyne1012/openvsp-mcp"
 Repository = "https://github.com/rhyne1012/openvsp-mcp"
+Issues = "https://github.com/rhyne1012/openvsp-mcp/issues"
+Upstream = "https://github.com/Three-Little-Birds/openvsp-mcp"
 
 [project.scripts]
 openvsp-mcp = "openvsp_mcp.__main__:main"
