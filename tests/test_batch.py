@@ -174,7 +174,7 @@ def test_resume_rejects_changed_evidence(runner, monkeypatch, target):
     directory = submit(count=1)
     wait_done(directory)
     root = Path(directory)
-    data = json.loads((root / "batch.json").read_text())
+    data = batch._load(root, details=True)
     if target == "source":
         source.write_text(MODEL + "\n")
     elif target == "snapshot":
@@ -185,10 +185,14 @@ def test_resume_rejects_changed_evidence(runner, monkeypatch, target):
         Path(data["cases"][0]["response"]["manifest_path"]).write_text("modified")
     else:
         if target == "spec":
-            data["spec"]["request"]["cases"][0]["analysis"]["alpha"] = 17
+            path = root / "spec.json"
+            modified = data["spec"]
+            modified["request"]["cases"][0]["analysis"]["alpha"] = 17
         else:
-            data["cases"][0]["response"]["coefficients"]["CLtot"] = 17
-        (root / "batch.json").write_text(json.dumps(data))
+            path = root / data["cases"][0]["detail_file"]
+            modified = json.loads(path.read_text())
+            modified["response"]["coefficients"]["CLtot"] = 17
+        path.write_text(json.dumps(modified))
     with pytest.raises(RuntimeError):
         batch.resume_batch(BatchResumeRequest(batch_directory=directory))
 
@@ -206,6 +210,69 @@ def test_cancel_case_cancel_batch_and_explicit_retry(runner):
     other = submit()
     batch.cancel_batch(BatchCancelRequest(batch_directory=other))
     assert wait_done(other)["status"] == "cancelled"
+
+
+def test_compact_status_does_not_read_details_or_rewrite_spec(runner, monkeypatch):
+    submit, _, _, _, _, _ = runner
+    root = Path(submit(count=2))
+    wait_done(str(root))
+    index = json.loads((root / "batch.json").read_text())
+    assert index["schema_version"] == 2 and "spec" not in index
+    assert all("response" not in row and "attempts" not in row for row in index["cases"])
+    before = (root / "spec.json").stat().st_mtime_ns
+    monkeypatch.setattr(batch, "load_case", lambda *a: pytest.fail("status read case details"))
+    assert batch.batch_status(BatchStatusRequest(batch_directory=str(root)))["status"] == "success"
+    assert (root / "spec.json").stat().st_mtime_ns == before
+
+
+def test_case_record_failure_never_reports_success(runner, monkeypatch):
+    submit, _, _, _, _, _ = runner
+
+    def failed_write(*args):
+        raise OSError("disk write failed")
+
+    monkeypatch.setattr(batch, "save_case", failed_write)
+    directory = submit(count=2, max_parallel_jobs=1)
+    status = wait_done(directory)
+    assert status["status"] == "failed" and status["counts"]["success"] == 0
+    assert "Cannot persist" in status["error"]
+    assert batch._load(Path(directory), details=True)["cases"][0]["status"] == "failed"
+
+
+def test_legacy_manifest_remains_readable_exportable_and_identity_guarded(runner):
+    submit, _, _, _, _, _ = runner
+    root = Path(submit(count=1))
+    wait_done(str(root))
+    data = batch._load(root, details=True)
+    data["schema_version"] = 1
+    (root / "batch.json").write_text(json.dumps(data))
+    assert batch.batch_status(BatchStatusRequest(batch_directory=str(root)))["status"] == "success"
+    assert batch.export_batch(BatchExportRequest(batch_directory=str(root)))["case_count"] == 1
+    data["spec"]["identity"] = {"previous_package": "0.7.0"}
+    data["fingerprint"] = batch._fingerprint(data["spec"])
+    (root / "batch.json").write_text(json.dumps(data))
+    with pytest.raises(RuntimeError, match="identity changed"):
+        batch.resume_batch(BatchResumeRequest(batch_directory=str(root)))
+
+
+def test_resume_persists_interrupted_attempt_before_launch(runner, monkeypatch):
+    submit, _, _, _, _, _ = runner
+    root = Path(submit(count=1))
+    wait_done(str(root))
+    data = json.loads((root / "batch.json").read_text())
+    data["status"] = "running"
+    data["cases"][0].update(status="running", native_pid=None)
+    (root / "batch.json").write_text(json.dumps(data))
+
+    def crash_after_launch(directory, data, ownership):
+        batch._write(directory / "batch.json", batch.compact_index(data))
+        ownership.close()
+
+    monkeypatch.setattr(batch, "_launch", crash_after_launch)
+    batch.resume_batch(BatchResumeRequest(batch_directory=str(root)))
+    recovered = batch._load(root, details=True)
+    assert recovered["cases"][0]["attempts"][-1]["status"] == "interrupted"
+    assert "response" not in recovered["cases"][0]
 
 
 def test_live_resume_is_locked_and_unknown_cancel_does_not_stop_work(runner):

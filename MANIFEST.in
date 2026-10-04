@@ -1,3 +1,4 @@
 recursive-include scripts *.py
-recursive-include examples *.py *.vspscript
+recursive-include examples *.py *.vspscript *.json
 recursive-include docs *.md *.json
+recursive-include tests *.py *.json

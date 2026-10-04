@@ -13,6 +13,7 @@ from threading import Lock
 from . import core
 from .describe import describe_geometry
 from .models import OpenVSPRequest, ParameterEditRequest, QueryRequest
+from .native import DOCUMENTED_ANALYSIS_VERSIONS
 from .runtime import check_cancelled
 
 _cache = {}
@@ -57,7 +58,11 @@ def _script(request: QueryRequest, source: Path | None, token: str) -> str:
         lines += ['result+=",\\"analyses\\":"+Strings(ListAnalysis());']
     elif request.kind == "analysis":
         name = q(request.analysis_name)
+        safe_versions = " || ".join(
+            f"GetVSPVersion()=={q(version)}" for version in sorted(DOCUMENTED_ANALYSIS_VERSIONS)
+        )
         lines += [
+            f"bool docsAvailable=({safe_versions});",
             f"array<string> analyses=ListAnalysis(); if(analyses.find({name})<0) return 2;",
             f"SetAnalysisInputDefaults({name});",
             f"array<string> names=GetAnalysisInputNames({name});",
@@ -66,6 +71,10 @@ def _script(request: QueryRequest, source: Path | None, token: str) -> str:
             f"string key=names[i]; int type=GetAnalysisInputType({name},key);",
             f"int count=GetNumAnalysisInputData({name},key);",
             'result+="{\\"name\\":"+J(key)+",\\"type_code\\":"+formatInt(type);',
+            (
+                f'if(docsAvailable) result+=",\\"description\\":"+J(GetAnalysisInputDoc({name},key));'
+                ' else result+=",\\"description\\":null";'
+            ),
             'result+=",\\"blocks\\":[";',
             'for(int j=0;j<count;j++) { if(j>0) result+=",";',
             f"if(type==INT_DATA) result+=Ints(GetIntAnalysisInput({name},key,j));",
@@ -177,7 +186,9 @@ def query_model(request: QueryRequest) -> dict:
     if request.kind == "analysis":
         result["analysis_name"] = request.analysis_name
         result["description_status"] = (
-            "omitted: unsafe audited AngelScript GetAnalysisInputDoc binding"
+            "available"
+            if result.get("openvsp_version") in DOCUMENTED_ANALYSIS_VERSIONS
+            else "omitted: unaudited or unsafe AngelScript GetAnalysisInputDoc binding"
         )
         result["defaults_source"] = "loaded model" if snapshot else "empty OpenVSP model"
         result["scope"] = "INT/DOUBLE/STRING values; unsupported data types have null blocks."

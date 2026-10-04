@@ -5,12 +5,14 @@ import time
 from contextlib import contextmanager
 from contextvars import ContextVar
 from functools import partial
-from threading import BoundedSemaphore, Condition, Event, Lock
+from threading import Condition, Event, Lock
 
 import anyio
+from anyio.lowlevel import RunVar
 
 _cancel: ContextVar[Event | None] = ContextVar("openvsp_cancel", default=None)
-_slots = BoundedSemaphore(2)
+_limiters = RunVar("openvsp_worker_limiters")
+_admission: ContextVar[float] = ContextVar("openvsp_worker_queue_seconds", default=0.0)
 commit_lock = Lock()
 _lease: ContextVar[int] = ContextVar("openvsp_cpu_lease", default=0)
 _observer: ContextVar[object] = ContextVar("openvsp_process_observer", default=None)
@@ -111,36 +113,58 @@ def check_cancelled():
         raise RuntimeError("OpenVSP operation exceeded its total time budget")
 
 
-async def run_async(function, *args, **kwargs):
+def worker_queue_seconds():
+    return _admission.get()
+
+
+async def _dispatch(function, args, kwargs, lane):
     """Cancellation signals the worker and waits briefly for process-group cleanup."""
-    cancel, finished = Event(), Event()
+    cancel, entered, finished = Event(), Event(), Event()
+    started = time.monotonic()
+    try:
+        limiters = _limiters.get()
+    except LookupError:
+        limiters = {
+            name: anyio.CapacityLimiter(size)
+            for name, size in [("native", 2), ("read", 4), ("control", 4)]
+        }
+        _limiters.set(limiters)
 
     def work():
+        entered.set()
         token = _cancel.set(cancel)
-        acquired = False
+        admission = _admission.set(time.monotonic() - started)
         try:
-            while not acquired:
-                check_cancelled()
-                acquired = _slots.acquire(timeout=0.05)
             check_cancelled()
             return function(*args, **kwargs)
         finally:
-            if acquired:
-                _slots.release()
+            _admission.reset(admission)
             _cancel.reset(token)
             finished.set()
 
     try:
-        return await anyio.to_thread.run_sync(partial(work), abandon_on_cancel=True)
+        return await anyio.to_thread.run_sync(
+            partial(work), abandon_on_cancel=True, limiter=limiters[lane]
+        )
     except anyio.get_cancelled_exc_class():
         cancel.set()
         with anyio.CancelScope(shield=True):
             with anyio.move_on_after(3):
-                while not finished.is_set():
+                while entered.is_set() and not finished.is_set():
                     await anyio.sleep(0.05)
         raise
 
 
+async def run_async(function, *args, **kwargs):
+    """Bound native operations separately from reads and lifecycle controls."""
+    return await _dispatch(function, args, kwargs, "native")
+
+
+async def run_read(function, *args):
+    """File reads do not wait for native jobs or occupy their worker capacity."""
+    return await _dispatch(function, args, {}, "read")
+
+
 async def run_control(function, *args):
-    """Status/cancel must remain available when both legacy worker slots are occupied."""
-    return await anyio.to_thread.run_sync(partial(function, *args))
+    """Batch lifecycle operations have their own capacity, including AnyIO admission."""
+    return await _dispatch(function, args, {}, "control")

@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import csv
-import hashlib
 import json
 import os
 import tempfile
@@ -13,7 +12,7 @@ import uuid
 from contextlib import asynccontextmanager
 from datetime import datetime, timezone
 from pathlib import Path
-from shutil import copy2, which
+from shutil import copy2
 
 import anyio
 
@@ -27,6 +26,21 @@ from .models import (
     BatchStatusRequest,
     OpenVSPRequest,
 )
+from .native import digest_file as _digest
+from .native import native_identity, refresh_identities
+from .storage import (
+    atomic_json as _write,
+)
+from .storage import (
+    compact_index,
+    load_case,
+    read_json,
+    save_case,
+    specification,
+)
+from .storage import (
+    fingerprint as _fingerprint,
+)
 from .version import version_info
 
 _jobs = {}
@@ -39,41 +53,8 @@ def _now():
     return datetime.now(timezone.utc).isoformat()
 
 
-def _digest(path):
-    digest = hashlib.sha256()
-    with Path(path).open("rb") as stream:
-        for block in iter(lambda: stream.read(1024 * 1024), b""):
-            digest.update(block)
-    return digest.hexdigest()
-
-
-def _fingerprint(value):
-    return hashlib.sha256(json.dumps(value, sort_keys=True, allow_nan=False).encode()).hexdigest()
-
-
-def _nonfinite(value):
-    raise ValueError(f"Non-finite manifest value: {value}")
-
-
 def _identity():
-    result = version_info()
-    for label, configured in [("openvsp", core.OPENVSP_BIN), ("vspaero", core.VSPAERO_BIN)]:
-        path = Path(which(configured) or configured).resolve()
-        result[label] = {"path": str(path), "sha256": _digest(path)}
-    return result
-
-
-def _write(path, data):
-    fd, temporary = tempfile.mkstemp(prefix=".batch-", dir=path.parent)
-    try:
-        with os.fdopen(fd, "w", encoding="utf-8") as stream:
-            json.dump(data, stream, indent=2, allow_nan=False)
-            stream.write("\n")
-            stream.flush()
-            os.fsync(stream.fileno())
-        os.replace(temporary, path)
-    finally:
-        Path(temporary).unlink(missing_ok=True)
+    return version_info() | native_identity(core.OPENVSP_BIN, core.VSPAERO_BIN)
 
 
 class _FileLock:
@@ -111,19 +92,23 @@ def _owned(directory):
     return False
 
 
-def _load(directory):
+def _load(directory, *, details=False, refresh=False):
     try:
-        with (directory / "batch.json").open("rb") as stream:
-            raw = stream.read(64 * 1024 * 1024 + 1)
-        if len(raw) > 64 * 1024 * 1024:
-            raise ValueError("Batch manifest exceeds 64 MiB")
-        data = json.loads(raw, parse_constant=_nonfinite)
+        data = read_json(directory / "batch.json")
+        if not isinstance(data, dict):
+            raise TypeError("Batch manifest must be an object")
         if data.get("batch_directory") != str(directory):
             raise ValueError("Batch directory moved; restore its original absolute location")
-        if data["schema_version"] != 1 or data["fingerprint"] != _fingerprint(data["spec"]):
+        if data["schema_version"] == 2:
+            data["spec"], ids = specification(directory, data["fingerprint"], refresh=refresh)
+            if details:
+                data["cases"] = [load_case(directory, row) for row in data["cases"]]
+        elif data["schema_version"] == 1 and data["fingerprint"] == _fingerprint(data["spec"]):
+            spec = BatchRequest.model_validate(data["spec"]["request"])
+            ids = tuple(c.case_id for c in spec.cases)
+        else:
             raise ValueError("Batch schema or specification fingerprint mismatch")
-        spec = BatchRequest.model_validate(data["spec"]["request"])
-        if [r["case_id"] for r in data["cases"]] != [c.case_id for c in spec.cases]:
+        if tuple(r["case_id"] for r in data["cases"]) != ids:
             raise ValueError("Batch case IDs do not match the saved specification")
         if any(r["status"] not in _ACTIVE | _TERMINAL for r in data["cases"]):
             raise ValueError("Invalid case state")
@@ -135,6 +120,7 @@ def _load(directory):
 def _validate_resume(directory, data):
     spec = data["spec"]
     try:
+        refresh_identities()
         source = Path(spec["request"]["geometry_file"])
         if _digest(source) != spec["source_sha256"]:
             raise RuntimeError("Original model changed; submit a new batch")
@@ -179,7 +165,7 @@ class _Job:
 
     def save(self):
         self.data["updated_at"] = _now()
-        _write(self.directory / "batch.json", self.data)
+        _write(self.directory / "batch.json", compact_index(self.data))
 
     def cancel(self, ids):
         with self.lock:
@@ -195,6 +181,8 @@ class _Job:
         case = self.request.cases[index]
         row = self.data["cases"][index]
         started = time.monotonic()
+        timings = {}
+        outcome = {}
 
         def observe(pid):
             with self.lock:
@@ -203,7 +191,10 @@ class _Job:
 
         try:
             with runtime.cancellation_scope(self.events[case.case_id], observe):
+                admission_started = time.monotonic()
                 with runtime.cpu_allocation(case.analysis.ncpu):
+                    timings["resource_wait_seconds"] = time.monotonic() - admission_started
+                    verification_started = time.monotonic()
                     if (
                         _digest(self.directory / "source.vsp3")
                         != self.data["spec"]["source_sha256"]
@@ -213,9 +204,11 @@ class _Job:
                         raise RuntimeError(
                             "Executable/package identity changed during batch execution"
                         )
+                    timings["input_verification_seconds"] = time.monotonic() - verification_started
                     with self.lock:
                         row.update(status="running", started_at=_now())
                         self.save()
+                    execution_started = time.monotonic()
                     response = core.execute_openvsp(
                         OpenVSPRequest(
                             geometry_file=str(self.directory / "source.vsp3"),
@@ -227,32 +220,38 @@ class _Job:
                         ),
                         operation="run_vspaero",
                     ).model_dump()
+                    timings["operation_seconds"] = time.monotonic() - execution_started
                 # An operation that already validated may finish before a late cancellation.
                 artifacts = {}
+                hash_started = time.monotonic()
                 for value in response["artifacts"].values():
                     path = Path(value).resolve()
                     if not path.is_relative_to(self.directory):
                         raise RuntimeError("Result artifact escaped the batch directory")
                     artifacts[str(path.relative_to(self.directory))] = _digest(path)
-                with self.lock:
-                    row.update(
-                        status="success",
-                        response=response,
-                        artifact_hashes=artifacts,
-                        response_sha256=_fingerprint(response),
-                        error=None,
-                    )
+                timings["artifact_hash_seconds"] = time.monotonic() - hash_started
+                outcome.update(
+                    status="success",
+                    response=response,
+                    artifact_hashes=artifacts,
+                    response_sha256=_fingerprint(response),
+                    error=None,
+                )
         except Exception as exc:  # noqa: BLE001 - persist background failures for the caller
             with self.lock:
-                row.update(
+                outcome.update(
                     status="cancelled" if isinstance(exc, runtime.OperationCancelled) else "failed",
                     error=str(exc),
                 )
-                if row["status"] == "failed" and self.request.failure_policy == "stop":
+                if outcome["status"] == "failed" and self.request.failure_policy == "stop":
                     self.stop = self.stop or "failed"
         finally:
             with self.lock:
+                previous = {key: row[key] for key in ("detail_file", "detail_sha256") if key in row}
+                previous["attempts"] = list(row["attempts"])
+                row.update(outcome)
                 row.update(finished_at=_now(), elapsed_seconds=time.monotonic() - started)
+                row["timings"] = timings
                 row["attempts"].append(
                     {
                         "status": row["status"],
@@ -262,7 +261,29 @@ class _Job:
                         "manifest_path": row.get("response", {}).get("manifest_path"),
                     }
                 )
-                self.save()
+                try:
+                    if self.data["schema_version"] == 2:
+                        record_started = time.monotonic()
+                        save_case(self.directory, row)
+                        timings["detail_write_seconds"] = time.monotonic() - record_started
+                    index_started = time.monotonic()
+                    self.save()
+                    timings["index_write_seconds"] = time.monotonic() - index_started
+                    row["elapsed_seconds"] = time.monotonic() - started
+                except (OSError, ValueError) as exc:
+                    # Never publish success without a committed, readable detail record.
+                    for key in (
+                        "detail_file",
+                        "detail_sha256",
+                        "response",
+                        "artifact_hashes",
+                        "response_sha256",
+                    ):
+                        row.pop(key, None)
+                    row.update(previous)
+                    row.update(status="failed", error=f"Cannot persist case result: {exc}")
+                    self.data["error"] = row["error"]
+                    self.stop = "failed"
 
     def _run(self):
         started = time.monotonic()
@@ -381,7 +402,7 @@ def submit_batch(request: BatchRequest) -> dict:
             "source_sha256": source_hash,
         }
         data = {
-            "schema_version": 1,
+            "schema_version": 2,
             "batch_directory": str(directory),
             "batch_id": directory.name,
             "created_at": _now(),
@@ -391,6 +412,7 @@ def submit_batch(request: BatchRequest) -> dict:
                 {"case_id": c.case_id, "status": "queued", "attempts": []} for c in request.cases
             ],
         }
+        _write(directory / "spec.json", spec)
         runtime.check_cancelled()
         with _jobs_lock:
             _launch(directory, data, ownership)
@@ -453,10 +475,11 @@ def batch_status(request: BatchStatusRequest) -> dict:
                     "started_at",
                     "finished_at",
                     "elapsed_seconds",
+                    "timings",
                 )
                 if k in row
             }
-            | {"attempt_count": len(row["attempts"])}
+            | {"attempt_count": row.get("attempt_count", len(row.get("attempts", [])))}
             for row in data["cases"][request.offset : request.offset + request.limit]
         ],
     }
@@ -483,7 +506,7 @@ def resume_batch(request: BatchResumeRequest) -> dict:
     try:
         with _jobs_lock:
             ownership = _FileLock(directory)
-            data = _load(directory)
+            data = _load(directory, details=True, refresh=True)
             _validate_resume(directory, data)
             unknown = set(request.case_ids) - {r["case_id"] for r in data["cases"]}
             if unknown:
@@ -509,9 +532,12 @@ def resume_batch(request: BatchResumeRequest) -> dict:
                     "started_at",
                     "finished_at",
                     "elapsed_seconds",
+                    "timings",
                 ):
                     row.pop(key, None)
                 row.update(status="queued", error=None, native_pid=None)
+                if data["schema_version"] == 2:
+                    save_case(directory, row)
                 selected += 1
             if selected:
                 _launch(directory, data, ownership)
@@ -523,7 +549,7 @@ def resume_batch(request: BatchResumeRequest) -> dict:
                 if "failed" in states:
                     status = "failed"
                 data.update(status=status, finished_at=_now(), updated_at=_now())
-                _write(directory / "batch.json", data)
+                _write(directory / "batch.json", compact_index(data))
     except OSError as exc:
         raise RuntimeError(f"Cannot resume batch: {exc}") from exc
     finally:
@@ -535,10 +561,10 @@ def resume_batch(request: BatchResumeRequest) -> dict:
 def export_batch(request: BatchExportRequest) -> dict:
     """Export a consistent manifest snapshot; pending/failed rows remain explicit."""
     directory = Path(request.batch_directory).expanduser().resolve()
-    data = _load(directory)
+    data = _load(directory, details=True)
     rows = []
     for case, state in zip(data["spec"]["request"]["cases"], data["cases"]):
-        response = state.get("response", {})
+        response = state.get("response", {}) if state["status"] == "success" else {}
         row = {
             "case_id": case["case_id"],
             "status": state["status"],
@@ -557,6 +583,7 @@ def export_batch(request: BatchExportRequest) -> dict:
         ]:
             row[key] = response.get(key)
         row["requested_parameter_edits"] = case["parameter_edits"]
+        row["case_timings"] = state.get("timings", {})
         rows.append(row)
     export_dir = directory / ("export-" + uuid.uuid4().hex[:12])
     try:

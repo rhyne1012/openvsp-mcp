@@ -33,7 +33,7 @@ from .models import (
 )
 from .query import query_model, set_parameters
 from .results import read_results
-from .runtime import run_async, run_control
+from .runtime import run_async, run_control, run_read
 from .version import __version__
 from .workflows import create_model, preflight_model, preview_model, run_sweep
 
@@ -49,7 +49,7 @@ def create_app() -> FastAPI:
     @app.post("/vsp/inspect", response_model=OpenVSPInspectResponse)
     async def inspect(request: OpenVSPGeometryRequest) -> OpenVSPInspectResponse:
         try:
-            return await run_async(describe_geometry, request.geometry_file)
+            return await run_read(describe_geometry, request.geometry_file)
         except RuntimeError as exc:
             raise HTTPException(status_code=500, detail=str(exc)) from exc
 
@@ -118,7 +118,7 @@ def create_app() -> FastAPI:
     @app.post("/vsp/results")
     async def results(request: ResultRequest):
         try:
-            return await run_async(read_results, request)
+            return await run_read(read_results, request)
         except RuntimeError as exc:
             raise HTTPException(status_code=500, detail=str(exc)) from exc
 

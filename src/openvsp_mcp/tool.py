@@ -28,7 +28,7 @@ from .models import (
 )
 from .query import query_model, set_parameters
 from .results import read_results
-from .runtime import run_async, run_control
+from .runtime import run_async, run_control, run_read
 from .workflows import create_model, preflight_model, preview_model, run_sweep
 
 
@@ -81,7 +81,7 @@ def build_tool(app: FastMCP) -> None:
             OpenVSPGeometryRequest, Field(description="Model file to inspect as XML.")
         ],
     ) -> OpenVSPInspectResponse:
-        return await run_async(describe_geometry, request.geometry_file)
+        return await run_read(describe_geometry, request.geometry_file)
 
     @app.tool(
         name="openvsp.modify",
@@ -235,9 +235,9 @@ def build_tool(app: FastMCP) -> None:
         description=(
             "Read a saved operation manifest's coefficients, settings, diagnostics and optional "
             "bounded log tail without launching OpenVSP/VSPAERO or writing files. Pass an "
-            "operation's manifest_path as manifest_file; missing coefficient names or invalid "
+            "operation's manifest_path as manifest_file; unknown coefficient names or invalid "
             "manifests fail. Use openvsp.batch_status or openvsp.batch_export for batch.json, "
-            "which is not an operation manifest."
+            "which is not an operation manifest. Known undefined ratios return explicit reasons."
         ),
         annotations=ToolAnnotations(readOnlyHint=True, openWorldHint=False),
     )
@@ -247,7 +247,7 @@ def build_tool(app: FastMCP) -> None:
             Field(description="Saved operation manifest, coefficient selection and log bounds."),
         ],
     ) -> dict[str, Any]:
-        return await run_async(read_results, request)
+        return await run_read(read_results, request)
 
     @app.tool(
         name="openvsp.batch_submit",

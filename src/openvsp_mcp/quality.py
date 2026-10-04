@@ -1,7 +1,8 @@
 """Report observed iteration changes without claiming aerodynamic convergence."""
 
-import math
 from pathlib import Path
+
+from .numeric import finite_row
 
 
 def history_diagnostics(path: Path) -> dict:
@@ -10,7 +11,7 @@ def history_diagnostics(path: Path) -> dict:
         "mesh_study": "not_performed",
         "scope": "Iteration changes are diagnostics, not an accuracy or convergence gate.",
     }
-    header, rows, invalid = None, [], []
+    header, rows, invalid, unavailable = None, [], [], {}
     for number, line in enumerate(path.read_text(errors="replace").splitlines(), 1):
         cols = (
             line.replace("L2 Residual", "L2_Residual")
@@ -25,10 +26,15 @@ def history_diagnostics(path: Path) -> dict:
             except ValueError:
                 invalid.append(number)
                 continue
-            if len(values) == len(header) and all(math.isfinite(v) for v in values):
-                rows.append(dict(zip(header, values)))
-            else:
+            try:
+                row, missing = finite_row(header, values)
+                rows.append(row)
+                for name, reason in missing.items():
+                    entry = unavailable.setdefault(name, {"reason": reason, "line_numbers": []})
+                    entry["line_numbers"].append(number)
+            except ValueError:
                 invalid.append(number)
+    report["unavailable_history_fields"] = unavailable
     if invalid:
         return report | {
             "history_status": "invalid",
