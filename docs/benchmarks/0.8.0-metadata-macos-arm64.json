@@ -1,0 +1,67 @@
+{
+  "scope": "Compare legacy/compact batch metadata on the same synthetic completed cases.\n\nMeasures warm polling and atomic index rewrites, not submission, native solves,\ndetail creation, export, recovery, or total batch throughput.\n",
+  "cases": 1000,
+  "samples": 7,
+  "synthetic_per_case": {
+    "coefficients": 40,
+    "parameter_values": 100,
+    "artifact_hashes": 15
+  },
+  "legacy": {
+    "index_bytes": 6162588,
+    "poll": {
+      "median_ms": 23.494000008213334,
+      "samples_ms": [
+        24.649124999996275,
+        24.575000003096648,
+        23.494000008213334,
+        23.78566599509213,
+        23.240624999743886,
+        22.749625000869855,
+        22.487124995677732
+      ]
+    },
+    "rewrite": {
+      "median_ms": 79.20312498754356,
+      "samples_ms": [
+        79.5014169998467,
+        79.20312498754356,
+        78.94012500764802,
+        79.2590420023771,
+        77.74083300319035,
+        79.80658400629181,
+        76.1349579988746
+      ]
+    }
+  },
+  "compact": {
+    "index_bytes": 234015,
+    "poll": {
+      "median_ms": 5.306291001033969,
+      "samples_ms": [
+        5.460542000946589,
+        5.270415989798494,
+        5.280792000121437,
+        5.304082995280623,
+        5.306291001033969,
+        5.316917013260536,
+        5.561666010180488
+      ]
+    },
+    "rewrite": {
+      "median_ms": 2.4745419941609725,
+      "samples_ms": [
+        2.6485410053282976,
+        2.5319999986095354,
+        2.5242919946322218,
+        2.4297500058310106,
+        2.423334008199163,
+        2.4660829949425533,
+        2.4745419941609725
+      ]
+    }
+  },
+  "platform": "Darwin",
+  "architecture": "arm64",
+  "python": "3.13.5"
+}

@@ -1,0 +1,8 @@
+{
+  "scope": "Workflow regression for the generated simple_aircraft at alpha=3, Mach=0.1, Re=2900000, Vinf=34.03 with the explicit smoke reference values. Not aerodynamic accuracy validation.",
+  "absolute_tolerance": 1e-8,
+  "openvsp_versions": {
+    "3.51.3": {"CLtot": 0.233342828966, "CDtot": 0.009594823037},
+    "3.53.1": {"CLtot": 0.233063213237, "CDtot": 0.014829214640}
+  }
+}

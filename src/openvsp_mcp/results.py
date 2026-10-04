@@ -26,7 +26,16 @@ def read_results(request: ResultRequest) -> dict:
             not isinstance(v, (int, float)) or not math.isfinite(v) for v in coefficients.values()
         ):
             raise RuntimeError("Invalid saved coefficients")
-        missing = set(request.coefficient_names) - coefficients.keys()
+        quality = manifest.get("numerical_quality", {})
+        if not isinstance(quality, dict):
+            raise TypeError("Invalid saved numerical quality")
+        unavailable = quality.get("unavailable_coefficients", {})
+        if not isinstance(unavailable, dict) or any(
+            not isinstance(reason, str) or key in coefficients
+            for key, reason in unavailable.items()
+        ):
+            raise RuntimeError("Invalid saved unavailable coefficients")
+        missing = set(request.coefficient_names) - coefficients.keys() - unavailable.keys()
         if missing:
             raise RuntimeError(f"Unknown coefficient names: {sorted(missing)}")
         result = {
@@ -44,10 +53,15 @@ def read_results(request: ResultRequest) -> dict:
             )
         }
         result["coefficients"] = (
-            {k: coefficients[k] for k in request.coefficient_names}
+            {k: coefficients[k] for k in request.coefficient_names if k in coefficients}
             if request.coefficient_names
             else coefficients
         )
+        result["unavailable_coefficients"] = {
+            k: reason
+            for k, reason in unavailable.items()
+            if not request.coefficient_names or k in request.coefficient_names
+        }
         if request.log != "none":
             log = path.parent / (request.log + ".log")
             with log.open("rb") as stream:
@@ -61,5 +75,5 @@ def read_results(request: ResultRequest) -> dict:
             result["log_tail"] = "\n".join(lines[-request.log_tail_lines :])
             result["log_byte_limit"] = 65536
         return result
-    except (OSError, ValueError) as exc:
+    except (OSError, ValueError, TypeError) as exc:
         raise RuntimeError(f"Cannot read saved result: {exc}") from exc

@@ -76,6 +76,12 @@ async def main() -> None:
             cached = await call("query", {"kind": "capabilities"})
             assert cached["cache_hit"]
             evidence["analysis_schema"] = await call("query", {"kind": "analysis"})
+            if health["checks"]["openvsp"]["version"] == "3.53.1":
+                assert evidence["analysis_schema"]["description_status"] == "available"
+                assert all(
+                    isinstance(item["description"], str)
+                    for item in evidence["analysis_schema"]["inputs"]
+                )
             assert "FixedWakeFlag" in {
                 item["name"] for item in evidence["analysis_schema"]["inputs"]
             }
@@ -195,6 +201,10 @@ async def main() -> None:
             assert response.numerical_quality["convergence_status"] == "not_assessed"
             assert response.numerical_quality["history_status"] == "available"
             evidence["solve"] = response.model_dump()
+            baselines = json.loads(Path(__file__).with_name("baselines.json").read_text())
+            expected = baselines["openvsp_versions"][health["checks"]["openvsp"]["version"]]
+            for name, value in expected.items():
+                assert abs(response.coefficients[name] - value) < baselines["absolute_tolerance"]
             assert response.effective_settings["status"] == "verified"
             evidence["saved_results"] = await call(
                 "read_results",

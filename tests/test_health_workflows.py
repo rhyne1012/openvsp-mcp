@@ -19,7 +19,7 @@ def test_missing_executables_are_unhealthy_including_http(monkeypatch, tmp_path)
     assert result.status_code == 503
     data = result.json()
     assert data["status"] == "error"
-    assert data["package_version"] == "0.7.0"
+    assert data["package_version"] == "0.8.0"
     assert len(data["package_sha256"]) == 64
     assert all(v["status"] == "error" for v in data["checks"].values())
 
@@ -38,7 +38,7 @@ def test_version_only_exit_convention_is_narrow(monkeypatch, rc, out, err, expec
     monkeypatch.setattr(health, "_executable", lambda value: value)
 
     def api(script, log, timeout):
-        log.write_text("OpenVSP 3.51.3\nOPENVSP_HEALTH_API_OK\n")
+        log.write_text("OpenVSP 3.53.1\nOPENVSP_HEALTH_API_OK\n")
         return 0
 
     monkeypatch.setattr(core, "_run_script", api)

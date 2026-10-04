@@ -14,6 +14,7 @@ from mcp import ClientSession, StdioServerParameters
 from mcp.client.stdio import stdio_client
 
 from openvsp_mcp import __version__
+from openvsp_mcp.batch import _load
 
 
 def digest(path):
@@ -36,8 +37,10 @@ async def main():
         ):
             await session.initialize()
 
-            async def call(name, request):
-                result = await session.call_tool("openvsp." + name, {"request": request})
+            async def call(name, request=None):
+                result = await session.call_tool(
+                    "openvsp." + name, {} if request is None else {"request": request}
+                )
                 assert not result.isError, result.content
                 return result.structuredContent
 
@@ -49,6 +52,11 @@ async def main():
                     await asyncio.sleep(0.25)
                 raise AssertionError("Native batch exceeded smoke time budget")
 
+            evidence["health"] = await call("health")
+            baselines = json.loads(Path(__file__).with_name("baselines.json").read_text())
+            expected = baselines["openvsp_versions"][
+                evidence["health"]["checks"]["openvsp"]["version"]
+            ]
             aircraft = await call("create_model", {"output_dir": str(output)})
             wing = output / "rect_wing.vsp3"
             wing.write_bytes((files("openvsp_mcp.data") / "rect_wing.vsp3").read_bytes())
@@ -113,13 +121,12 @@ async def main():
                 assert (
                     finished["counts"]["success"] == 2 and finished["counts"]["cancelled"] == 1
                 ), finished
-                manifest_path = Path(directory) / "batch.json"
-                first = json.loads(manifest_path.read_text())
+                first = _load(Path(directory), details=True)
                 original_runs = [r["response"]["run_directory"] for r in first["cases"][:2]]
                 await call("batch_resume", {"batch_directory": directory})
                 finished = await done(directory)
                 assert finished["status"] == "success", finished
-                final = json.loads(manifest_path.read_text())
+                final = _load(Path(directory), details=True)
                 assert original_runs == [r["response"]["run_directory"] for r in final["cases"][:2]]
                 assert (
                     abs(
@@ -133,8 +140,11 @@ async def main():
                 rows = json.loads(Path(exported["json_path"]).read_text())["cases"]
                 assert len(rows) == 3 and all(r["status"] == "success" for r in rows)
                 if label == "conventional_aircraft":
-                    assert abs(rows[1]["coefficient.CLtot"] - 0.233342828966) < 1e-8
-                    assert abs(rows[1]["coefficient.CDtot"] - 0.009594823037) < 1e-8
+                    for name, value in expected.items():
+                        assert (
+                            abs(rows[1]["coefficient." + name] - value)
+                            < baselines["absolute_tolerance"]
+                        )
                 assert digest(model) == before
                 evidence["models"][label] = {
                     "batch_directory": directory,
@@ -163,7 +173,16 @@ async def main():
                         "failure_policy": "continue",
                     },
                 )
-                assert (await done(bad["batch_directory"]))["counts"]["failed"] == len(bad_cases)
+                completed = await done(bad["batch_directory"])
+                assert completed["counts"]["failed"] == 1, completed
+                if label == "rectangular_wing":
+                    assert completed["counts"]["success"] == 1, completed
+                    zero = _load(Path(bad["batch_directory"]), details=True)["cases"][1]["response"]
+                    assert abs(zero["coefficients"]["CLtot"]) < 1e-8
+                    assert "E" not in zero["coefficients"]
+                    assert "E" in zero["numerical_quality"]["unavailable_coefficients"]
+                    evidence["undefined_efficiency"] = zero
+                evidence["models"][label]["invalid_input_batch"] = completed
                 assert digest(model) == before
             await session.send_ping()
     (output / "batch_smoke_result.json").write_text(json.dumps(evidence, indent=2) + "\n")
@@ -179,6 +198,7 @@ async def main():
                     "resume reuses successes",
                     "CSV/JSON export",
                     "bad parameter rejection",
+                    "zero-lift forces with explicitly unavailable efficiency",
                     "source preservation",
                 ],
                 "evidence": str(output / "batch_smoke_result.json"),

@@ -4,6 +4,13 @@ A maintained fork of [Three-Little-Birds/openvsp-mcp](https://github.com/Three-L
 extending MCP automation for OpenVSP and VSPAERO with geometry inspection, model
 modification, and aerodynamic analysis. The original MIT license and history are retained.
 
+**0.8.0** validates OpenVSP 3.53.1, restores safe analysis-input descriptions,
+separates file-read/native/control admission, and reduces batch metadata I/O.
+Undefined native ratios are explicitly unavailable while finite force/moment
+checks remain mandatory. Tool names and input schemas are unchanged. See
+[0.8 architecture and compatibility](docs/runtime-0.8.md) and
+[validation evidence](docs/validation-0.8.md).
+
 **0.7.0** improves all 16 tool descriptions, parameter/output-field documentation
 and MCP annotations without changing tool names, input/output structures or
 OpenVSP/VSPAERO execution. Package identity changes as with any source update;
@@ -20,7 +27,7 @@ The [0.5 API audit](docs/api-audit-0.5.md) and existing single-case workflows re
 ## Install
 
 Python 3.10+ and a separate OpenVSP installation are required. Real integration
-is verified on macOS Apple Silicon with **OpenVSP 3.51.3 / VSPAERO 7.2.2**.
+is verified for 0.8.0 on macOS Apple Silicon with **OpenVSP 3.53.1 / VSPAERO 7.2.2**.
 Other binary versions/platforms have not been integration-tested. This pipeline
 requires the VSPAERO 7 thick/thin geometry-set interface. Binaries are not included.
 The MCP SDK is constrained to `>=1.20,<2` for the FastMCP 1.x interface.
@@ -51,6 +58,7 @@ Analysis API. The wrapper does not pass a `.vsp3` directly to the solver.
 Python/model files. `--health` additionally launches a small OpenVSP geometry/API
 probe and queries VSPAERO's version; it exits 1 when either check fails. Health
 reports the binary paths and whether the version pair matches the tested pair.
+Binary SHA-256 identities and the published validation scope are also reported.
 Health is a readiness check, not a full solve or a convergence certificate.
 
 For upgrades that preserve the previously selected environment until the candidate
@@ -236,7 +244,8 @@ Use `kind: "parameters"` with `geometry_file`; optionally select `geom_id` or
 `parm_ids`, and paginate with `offset`/`limit` (default 100, maximum 200).
 `kind: "capabilities"` lists installed analyses. Listing an analysis does not
 imply that this wrapper supports running it. Analysis input descriptions are
-omitted because of an audited upstream AngelScript binding defect; see the audit.
+enabled for the audited 3.53.0/3.53.1 binding. Older or unknown versions omit them
+without calling that binding; see the [0.8 notes](docs/runtime-0.8.md).
 
 Call `openvsp.set_parameters` with `geometry_file` and
 `edits: [{"parm_id": "ID_FROM_QUERY", "value": 1.5}]`. This operation modifies
@@ -257,6 +266,10 @@ separately by query. See the audit for intentionally narrower wrapper limits.
 `effective_settings` reports verified solver-file fields. The request and
 `analysis_inputs` remain the requested values; preflight alone does not verify a
 solver file. `timings` reports preparation/native/validation/total seconds.
+Additional queue, hashing, inventory and persistence timings have explicit
+[measurement boundaries](docs/runtime-0.8.md#timing-boundaries). Ratios omitted
+from `coefficients` have reasons in `numerical_quality.unavailable_coefficients`;
+`read_results` also returns the selected unavailable names and reasons.
 
 ## Other interfaces
 

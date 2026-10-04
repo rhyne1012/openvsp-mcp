@@ -18,6 +18,8 @@ from shutil import copy2, which
 from .describe import describe_geometry
 from .geometry import preflight_commands
 from .models import OpenVSPRequest, OpenVSPResponse
+from .native import native_identity
+from .numeric import finite_row
 from .quality import history_diagnostics
 from .runtime import (
     OperationCancelled,
@@ -25,6 +27,7 @@ from .runtime import (
     commit_lock,
     cpu_allocation,
     observe_process,
+    worker_queue_seconds,
 )
 from .settings import read_effective_settings
 from .version import version_info
@@ -218,7 +221,7 @@ def _run_script(script: Path, log: Path, timeout: int) -> int:
             observe_process(None)
 
 
-def _read_polar(path: Path, request: OpenVSPRequest) -> dict[str, float]:
+def _read_polar(path: Path, request: OpenVSPRequest, unavailable=None) -> dict[str, float]:
     header = None
     rows = []
     for line in path.read_text().splitlines():
@@ -232,9 +235,13 @@ def _read_polar(path: Path, request: OpenVSPRequest) -> dict[str, float]:
                 vals = [float(v) for v in cols]
             except ValueError as exc:
                 raise RuntimeError("Malformed VSPAERO polar row") from exc
-            if len(vals) != len(header) or not all(math.isfinite(v) for v in vals):
-                raise RuntimeError("Invalid or non-finite VSPAERO polar row")
-            rows.append(dict(zip(header, vals)))
+            try:
+                row, missing = finite_row(header, vals)
+            except ValueError as exc:
+                raise RuntimeError(f"Invalid or non-finite VSPAERO polar row: {exc}") from exc
+            if unavailable is not None:
+                unavailable.update(missing)
+            rows.append(row)
     if len(rows) != 1:
         raise RuntimeError(f"Expected one flight condition in polar, found {len(rows)}")
     row = rows[0]
@@ -310,7 +317,7 @@ def execute_openvsp(request: OpenVSPRequest, *, operation: str | None = None) ->
         "vspaero_binary": VSPAERO_BIN,
         "operation": operation,
         "versions": version_info(),
-        "timings": {},
+        "timings": {"worker_queue_seconds": worker_queue_seconds()},
     }
 
     def save_manifest():
@@ -318,6 +325,11 @@ def execute_openvsp(request: OpenVSPRequest, *, operation: str | None = None) ->
 
     save_manifest()
     try:
+        identity_started = time.monotonic()
+        manifest["versions"]["native_identity"] = native_identity(
+            OPENVSP_BIN, VSPAERO_BIN, required=False
+        )
+        manifest["timings"]["native_identity_seconds"] = time.monotonic() - identity_started
         log.touch()
         if source is not None:
             snapshot = run_dir / "input" / "source.vsp3"
@@ -408,7 +420,8 @@ def execute_openvsp(request: OpenVSPRequest, *, operation: str | None = None) ->
                 f = run_dir / name
                 if not f.is_file() or not f.stat().st_size:
                     raise RuntimeError(f"Missing or empty solver artifact: {name}")
-            coefficients = _read_polar(run_dir / f"{request.case_name}.polar", request)
+            unavailable = {}
+            coefficients = _read_polar(run_dir / f"{request.case_name}.polar", request, unavailable)
             effective = read_effective_settings(run_dir / f"{request.case_name}.vspaero", request)
             solver_version, threads = _solver_runtime(run_dir / "solver.log")
             manifest["versions"]["vspaero_version"] = solver_version
@@ -421,6 +434,11 @@ def execute_openvsp(request: OpenVSPRequest, *, operation: str | None = None) ->
                 raise RuntimeError("Observed solver thread count differs from requested ncpu")
             result = str(run_dir / f"{request.case_name}.adb")
             quality = history_diagnostics(run_dir / f"{request.case_name}.history")
+            quality["unavailable_coefficients"] = unavailable
+            if unavailable:
+                warnings.append(
+                    "Undefined native ratios omitted: " + ", ".join(sorted(unavailable))
+                )
             manifest["numerical_quality"] = quality
             if quality["history_status"] == "invalid":
                 raise RuntimeError("Invalid numerical history; see numerical diagnostics")
@@ -452,17 +470,21 @@ def execute_openvsp(request: OpenVSPRequest, *, operation: str | None = None) ->
             validation_seconds=time.monotonic() - validation_started,
             total_seconds=time.monotonic() - started,
         )
+        inventory_started = time.monotonic()
+        artifacts = {str(f.relative_to(run_dir)): str(f) for f in run_dir.rglob("*") if f.is_file()}
+        manifest["timings"]["artifact_inventory_seconds"] = time.monotonic() - inventory_started
+        manifest["timings"]["manifest_snapshot_seconds"] = time.monotonic() - started
+        commit_started = time.monotonic()
         save_manifest()
-        return OpenVSPResponse(
+        manifest["timings"]["final_manifest_write_seconds"] = time.monotonic() - commit_started
+        response = OpenVSPResponse(
             script_path=str(script),
             result_path=result,
             geometry_path=str(model),
             run_directory=str(run_dir),
             log_path=str(log),
             manifest_path=str(manifest_path),
-            artifacts={
-                str(f.relative_to(run_dir)): str(f) for f in run_dir.rglob("*") if f.is_file()
-            },
+            artifacts=artifacts,
             coefficients=coefficients,
             analysis_inputs=request.analysis.model_dump()
             if request.run_vspaero or operation == "preflight"
@@ -476,6 +498,11 @@ def execute_openvsp(request: OpenVSPRequest, *, operation: str | None = None) ->
             parameter_values=parameters,
             timings=manifest["timings"],
         )
+        response.timings["total_seconds"] = time.monotonic() - started
+        response.timings["request_elapsed_seconds"] = (
+            response.timings["total_seconds"] + worker_queue_seconds()
+        )
+        return response
     except (OSError, RuntimeError) as exc:
         with log.open("a", encoding="utf-8") as stream:
             stream.write(f"\nopenvsp-mcp: {exc}\n")

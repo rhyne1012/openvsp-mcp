@@ -9,6 +9,7 @@ from shutil import which
 from typing import Any
 
 from . import core
+from .native import TESTED_VERSION_PAIRS, native_identity
 from .runtime import OperationCancelled, check_cancelled, cpu_pool
 from .version import version_info
 
@@ -73,9 +74,18 @@ def health_check() -> dict[str, Any]:
             check["error"] = str(exc)
             result["status"] = "error"
         result["checks"][name] = check
-    result["tested_version_pair"] = (
-        result["checks"]["openvsp"].get("version") == "3.51.3"
-        and result["checks"]["vspaero"].get("version") == "7.2.2"
-    )
+    pair = tuple(result["checks"][name].get("version") for name in ("openvsp", "vspaero"))
+    result["tested_version_pair"] = pair in TESTED_VERSION_PAIRS
+    try:
+        result["native_identity"] = native_identity(
+            core.OPENVSP_BIN, core.VSPAERO_BIN, required=False
+        )
+    except RuntimeError as exc:
+        result.update(status="error", identity_error=str(exc))
+    result["validation_scope"] = {
+        "platform": "macOS arm64",
+        "version_pairs": [list(pair) for pair in sorted(TESTED_VERSION_PAIRS)],
+        "meaning": "Published native workflow evidence; health itself does not run these workflows.",
+    }
     result["scope"] = "Executable/API readiness; no aerodynamic accuracy or convergence claim."
     return result

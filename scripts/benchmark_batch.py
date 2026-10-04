@@ -19,6 +19,7 @@ from mcp import ClientSession, StdioServerParameters
 from mcp.client.stdio import stdio_client
 
 from openvsp_mcp import __version__
+from openvsp_mcp.batch import _load
 
 
 async def benchmark(args):
@@ -100,7 +101,7 @@ async def benchmark(args):
                         stop.set()
                         await watcher
                     assert status["status"] == "success", status
-                    data = json.loads((Path(directory) / "batch.json").read_text())
+                    data = _load(Path(directory), details=True)
                     coefficients = [r["response"]["coefficients"] for r in data["cases"]]
                     if reference is None:
                         reference = coefficients

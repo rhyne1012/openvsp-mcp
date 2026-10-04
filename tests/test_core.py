@@ -112,6 +112,13 @@ def test_solver_outputs_persist_and_input_unchanged(request_model, simulator):
     assert first.coefficients["CLtot"] == 0.233
     assert Path(first.result_path).is_file()
     assert json.loads(Path(first.manifest_path).read_text())["status"] == "success"
+    saved = json.loads(Path(first.manifest_path).read_text())
+    assert first.timings["total_seconds"] >= (
+        saved["timings"]["manifest_snapshot_seconds"]
+        + first.timings["final_manifest_write_seconds"]
+    )
+    assert first.timings["request_elapsed_seconds"] >= first.timings["total_seconds"]
+    assert "native_identity" in saved["versions"]
     script = Path(first.script_path).read_text()
     assert "int main()" in script and "return 0;" in script
     assert script.index('ExecAnalysis("VSPAEROComputeGeometry")') < script.index(

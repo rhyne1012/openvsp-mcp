@@ -208,7 +208,7 @@ class OpenVSPResponse(BaseModel):
     )
     coefficients: dict[str, float] = Field(
         default_factory=dict,
-        description="Native polar column names and unscaled numeric values for a verified solve; empty otherwise. Includes condition columns as well as dimensionless aerodynamic coefficients; AoA/Beta are degrees and Re/1e6 is Reynolds in millions.",
+        description="Native polar column names and finite unscaled values for a verified solve; empty otherwise. Undefined ratios are omitted with reasons in numerical_quality.unavailable_coefficients. Includes condition columns; AoA/Beta are degrees and Re/1e6 is Reynolds in millions.",
     )
     analysis_inputs: dict = Field(
         default_factory=dict,
@@ -220,7 +220,7 @@ class OpenVSPResponse(BaseModel):
     )
     warnings: list[str] = Field(
         default_factory=list,
-        description="Reference/unit/atmospheric consistency warnings from existing checks; no automatic corrections.",
+        description="Reference/unit/atmospheric consistency warnings and omitted undefined ratios; no automatic corrections.",
     )
     preflight: dict = Field(
         default_factory=dict,
