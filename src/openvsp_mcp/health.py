@@ -11,6 +11,7 @@ from typing import Any
 from . import core
 from .native import TESTED_VERSION_PAIRS, native_identity
 from .runtime import OperationCancelled, check_cancelled, cpu_pool
+from .validation import validation_metadata
 from .version import version_info
 
 
@@ -82,10 +83,6 @@ def health_check() -> dict[str, Any]:
         )
     except RuntimeError as exc:
         result.update(status="error", identity_error=str(exc))
-    result["validation_scope"] = {
-        "platform": "macOS arm64",
-        "version_pairs": [list(pair) for pair in sorted(TESTED_VERSION_PAIRS)],
-        "meaning": "Published native workflow evidence; health itself does not run these workflows.",
-    }
+    result.update(validation_metadata(result["checks"], result.get("native_identity", {})))
     result["scope"] = "Executable/API readiness; no aerodynamic accuracy or convergence claim."
     return result

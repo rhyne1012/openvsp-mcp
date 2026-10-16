@@ -28,13 +28,16 @@ The [0.5 API audit](docs/api-audit-0.5.md) and existing single-case workflows re
 
 Python 3.10+ and a separate OpenVSP installation are required. Real integration
 is verified for 0.8.0 on macOS Apple Silicon with **OpenVSP 3.53.1 / VSPAERO 7.2.2**.
-Other binary versions/platforms have not been integration-tested. This pipeline
+Ubuntu 24.04 x86_64 with the official 3.53.1 package is also verified, including
+headless operation and Mac-to-Ubuntu SSH stdio. See [Ubuntu installation](docs/ubuntu-ssh.md)
+and [native-build validation](docs/validation-ubuntu-3531.md). Other native builds
+have not been integration-tested. This pipeline
 requires the VSPAERO 7 thick/thin geometry-set interface. Binaries are not included.
 The MCP SDK is constrained to `>=1.20,<2` for the FastMCP 1.x interface.
 
 Keep Python environments, caches, and launchers on each computer's local disk.
 Source copies, models and result files can be synced; do not sync a venv or copy
-another computer's absolute-path client configuration. Validate each Mac separately.
+another computer's absolute-path client configuration. Validate each host separately.
 
 ```sh
 git clone https://github.com/rhyne1012/openvsp-mcp.git
@@ -59,6 +62,8 @@ Python/model files. `--health` additionally launches a small OpenVSP geometry/AP
 probe and queries VSPAERO's version; it exits 1 when either check fails. Health
 reports the binary paths and whether the version pair matches the tested pair.
 Binary SHA-256 identities and the published validation scope are also reported.
+`tested_version_pair` checks version strings only; `tested_native_build` additionally
+requires a published platform and both audited executable hashes.
 Health is a readiness check, not a full solve or a convergence certificate.
 
 For upgrades that preserve the previously selected environment until the candidate
@@ -228,8 +233,11 @@ checks actual geometry sets, rejects absent/empty/overlapping sets before solvin
 renames a wing, rejects an invalid parameter edit, runs one condition and an
 alpha 0/3 degree sweep. Full responses are saved in `smoke_outputs/smoke_result.json`;
 set `OPENVSP_SMOKE_OUTPUT` to choose a different output directory.
-The alpha 3 case gives approximately CL 0.233343 and CD 0.00959482. These numbers
-verify the workflow, not accuracy, convergence or design suitability.
+For 3.53.1 the audited Mac build gives CL 0.233063213237 / CD 0.014829214640;
+the audited Ubuntu build gives CL 0.233695178980 / CD 0.014638773132. Native smoke
+selects a baseline by both executable hashes, retaining the 1e-8 absolute tolerance;
+unknown builds fail explicitly. These are workflow regressions, not accuracy,
+convergence, platform equivalence or design-suitability certificates.
 
 Hosted CI uses no native binaries. Native smoke testing remains opt-in and must
 be repeated for each computer and binary version.

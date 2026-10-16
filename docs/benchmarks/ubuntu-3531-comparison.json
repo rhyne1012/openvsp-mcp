@@ -1,0 +1,91 @@
+{
+  "scope": "Same input model and requested conditions; independent native-build repeatability, not aerodynamic accuracy or platform equivalence.",
+  "date": "2026-10-16",
+  "source_sha256": "21ddc76ff11d3e16a89db3d18e8fdd736dd7ce4f75a8f3d3a3dae9ae30d70d10",
+  "platforms": {
+    "Ubuntu 24.04 x86_64": {
+      "native_identity": {
+        "openvsp": {
+          "sha256": "f86b1a785eca04d703d0fbd573f6e55d356e5cbb728d693190cd2079b4d92b12",
+          "version": "3.53.1"
+        },
+        "vspaero": {
+          "sha256": "b8d62390a5542e3f9ff20d5accd4fd3e01efc21dba6fab945f2b780cb0738d4a",
+          "version": "7.2.2"
+        }
+      },
+      "mesh_sha256": "9cf7fad97d5bd51f835a248f43d178708b43996904c477af150dbdb175464c09",
+      "mesh_header": [
+        "# vspgeom v3",
+        "1",
+        "1670 1544 5"
+      ],
+      "runs": [
+        {
+          "ncpu": 1,
+          "CLtot": 0.23369517898,
+          "CDtot": 0.014638773132
+        },
+        {
+          "ncpu": 2,
+          "CLtot": 0.23369517898,
+          "CDtot": 0.014638773132
+        },
+        {
+          "ncpu": 4,
+          "CLtot": 0.23369517898,
+          "CDtot": 0.014638773132
+        },
+        {
+          "ncpu": 4,
+          "CLtot": 0.23369517898,
+          "CDtot": 0.014638773132
+        }
+      ]
+    },
+    "macOS arm64": {
+      "native_identity": {
+        "openvsp": {
+          "sha256": "856bf05b14f9ecf56581b071fe0f801165286d22ab0b0f74b30b7f36889969d8",
+          "version": "3.53.1"
+        },
+        "vspaero": {
+          "sha256": "7ddca47bf20fecf6db416f8ed531b14afc277927f133fa0995a5c87ba058f169",
+          "version": "7.2.2"
+        }
+      },
+      "mesh_sha256": "6e885f2c5607cfc955162df4b6fddd44d4ac875c38f4631d3fed206008a4b9e2",
+      "mesh_header": [
+        "# vspgeom v3",
+        "1",
+        "1666 1544 5"
+      ],
+      "runs": [
+        {
+          "ncpu": 1,
+          "CLtot": 0.233063213237,
+          "CDtot": 0.01482921464
+        },
+        {
+          "ncpu": 2,
+          "CLtot": 0.233063213237,
+          "CDtot": 0.01482921464
+        },
+        {
+          "ncpu": 4,
+          "CLtot": 0.233063213237,
+          "CDtot": 0.01482921464
+        },
+        {
+          "ncpu": 4,
+          "CLtot": 0.233063213237,
+          "CDtot": 0.01482921464
+        }
+      ]
+    }
+  },
+  "relative_difference_percent": {
+    "CLtot": 0.2711563675033446,
+    "CDtot": -1.2842319207269859
+  }
+}

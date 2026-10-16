@@ -1,8 +1,44 @@
 {
-  "scope": "Workflow regression for the generated simple_aircraft at alpha=3, Mach=0.1, Re=2900000, Vinf=34.03 with the explicit smoke reference values. Not aerodynamic accuracy validation.",
-  "absolute_tolerance": 1e-8,
+  "scope": "Workflow regression for the generated simple_aircraft at alpha=3, Mach=0.1, Re=2900000, Vinf=34.03 with the explicit smoke reference values. Not aerodynamic accuracy validation. Native smoke selects native_builds by both executable hashes. openvsp_versions is historical documentation only.",
+  "absolute_tolerance": 1e-08,
   "openvsp_versions": {
-    "3.51.3": {"CLtot": 0.233342828966, "CDtot": 0.009594823037},
-    "3.53.1": {"CLtot": 0.233063213237, "CDtot": 0.014829214640}
-  }
+    "3.51.3": {
+      "CLtot": 0.233342828966,
+      "CDtot": 0.009594823037
+    },
+    "3.53.1": {
+      "CLtot": 0.233063213237,
+      "CDtot": 0.01482921464
+    }
+  },
+  "native_builds": [
+    {
+      "platform": "macOS arm64",
+      "system": "Darwin",
+      "machine": "arm64",
+      "openvsp_version": "3.53.1",
+      "vspaero_version": "7.2.2",
+      "openvsp_sha256": "856bf05b14f9ecf56581b071fe0f801165286d22ab0b0f74b30b7f36889969d8",
+      "vspaero_sha256": "7ddca47bf20fecf6db416f8ed531b14afc277927f133fa0995a5c87ba058f169",
+      "coefficients": {
+        "CLtot": 0.233063213237,
+        "CDtot": 0.01482921464
+      }
+    },
+    {
+      "platform": "Ubuntu 24.04 x86_64",
+      "system": "Linux",
+      "machine": "x86_64",
+      "distribution_id": "ubuntu",
+      "distribution_version": "24.04",
+      "openvsp_version": "3.53.1",
+      "vspaero_version": "7.2.2",
+      "openvsp_sha256": "f86b1a785eca04d703d0fbd573f6e55d356e5cbb728d693190cd2079b4d92b12",
+      "vspaero_sha256": "b8d62390a5542e3f9ff20d5accd4fd3e01efc21dba6fab945f2b780cb0738d4a",
+      "coefficients": {
+        "CLtot": 0.23369517898,
+        "CDtot": 0.014638773132
+      }
+    }
+  ]
 }
