@@ -10,6 +10,7 @@ import sys
 from importlib.resources import files
 from pathlib import Path
 
+from baseline import select_baseline
 from mcp import ClientSession, StdioServerParameters
 from mcp.client.stdio import stdio_client
 
@@ -53,10 +54,7 @@ async def main():
                 raise AssertionError("Native batch exceeded smoke time budget")
 
             evidence["health"] = await call("health")
-            baselines = json.loads(Path(__file__).with_name("baselines.json").read_text())
-            expected = baselines["openvsp_versions"][
-                evidence["health"]["checks"]["openvsp"]["version"]
-            ]
+            expected, tolerance = select_baseline(evidence["health"])
             aircraft = await call("create_model", {"output_dir": str(output)})
             wing = output / "rect_wing.vsp3"
             wing.write_bytes((files("openvsp_mcp.data") / "rect_wing.vsp3").read_bytes())
@@ -143,7 +141,7 @@ async def main():
                     for name, value in expected.items():
                         assert (
                             abs(rows[1]["coefficient." + name] - value)
-                            < baselines["absolute_tolerance"]
+                            < tolerance
                         )
                 assert digest(model) == before
                 evidence["models"][label] = {

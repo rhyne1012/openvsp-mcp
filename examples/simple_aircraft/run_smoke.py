@@ -11,6 +11,7 @@ import sys
 from datetime import timedelta
 from pathlib import Path
 
+from baseline import select_baseline
 from mcp import ClientSession, StdioServerParameters
 from mcp.client.stdio import stdio_client
 
@@ -201,10 +202,9 @@ async def main() -> None:
             assert response.numerical_quality["convergence_status"] == "not_assessed"
             assert response.numerical_quality["history_status"] == "available"
             evidence["solve"] = response.model_dump()
-            baselines = json.loads(Path(__file__).with_name("baselines.json").read_text())
-            expected = baselines["openvsp_versions"][health["checks"]["openvsp"]["version"]]
+            expected, tolerance = select_baseline(health)
             for name, value in expected.items():
-                assert abs(response.coefficients[name] - value) < baselines["absolute_tolerance"]
+                assert abs(response.coefficients[name] - value) < tolerance
             assert response.effective_settings["status"] == "verified"
             evidence["saved_results"] = await call(
                 "read_results",

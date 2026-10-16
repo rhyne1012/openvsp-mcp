@@ -32,9 +32,12 @@ OpenVSP itself. An existing MCP server keeps its loaded version until restarted.
 A candidate health check proves executable/API readiness. Run
 `examples/simple_aircraft/run_smoke.py` using the candidate interpreter before
 using a release for analysis. Compare `package_version`, `package_sha256`,
-`mcp_sdk_version` and the two binary versions between Macs, then perform the
+`mcp_sdk_version` and the two binary versions between hosts, then perform the
 native smoke independently. Absolute paths can legitimately differ.
 
 To roll back after stopping/restarting the client, atomically replace the
 `current` symlink with the retained previous release identified in the install
 record. No environments are automatically deleted.
+
+For the Ubuntu runtime layout, official native package and SSH stdio setup, see
+[Ubuntu and SSH](ubuntu-ssh.md).
