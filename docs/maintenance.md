@@ -1,3 +1,24 @@
+# Independent project maintenance
+
+Rhyne maintains development, issue tracking and releases at
+[rhyne1012/openvsp-mcp](https://github.com/rhyne1012/openvsp-mcp).
+The project originated from Three Little Birds' OpenVSP MCP implementation;
+its Git history and MIT copyright/license notice are preserved. Subsequent
+contributions carry an additional Rhyne copyright notice.
+
+Repository ownership and maintenance are distinct from GitHub's fork-network
+relationship. Before changing that relationship, retain a verified Git mirror
+and bundle, release notes and assets, and exported GitHub metadata. An exported
+PR or issue record is a historical archive; it does not recreate GitHub IDs,
+stars, subscriptions or original review links. GitHub does not expose stored
+secret values for backup.
+
+Historical release notes below describe the repository at the time of each
+change. Existing version tags and release assets remain immutable. Documentation
+and maintainer metadata changes do not replace an installed MCP runtime.
+
+---
+
 # OpenVSP 3.55.0 compatibility and MCP health (0.9.0)
 
 - Audit the tagged native API and enable analysis descriptions for exactly 3.55.0.

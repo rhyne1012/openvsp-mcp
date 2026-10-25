@@ -3,6 +3,7 @@ name = "openvsp-mcp"
 version = "0.10.0"
 description = "Domain-neutral MCP helpers for OpenVSP and VSPAero automation"
 authors = [{ name = "OpenVSP MCP Maintainers" }]
+maintainers = [{ name = "Rhyne (rhyne1012)" }]
 readme = "README.md"
 license = "MIT"
 license-files = ["LICENSE"]
@@ -25,6 +26,8 @@ dev = [
 [project.urls]
 Homepage = "https://github.com/rhyne1012/openvsp-mcp"
 Repository = "https://github.com/rhyne1012/openvsp-mcp"
+Issues = "https://github.com/rhyne1012/openvsp-mcp/issues"
+Releases = "https://github.com/rhyne1012/openvsp-mcp/releases"
 
 [project.scripts]
 openvsp-mcp = "openvsp_mcp.__main__:main"

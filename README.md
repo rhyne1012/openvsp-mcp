@@ -1,8 +1,9 @@
 # openvsp-mcp — OpenVSP and VSPAERO through MCP
 
-A maintained fork of [Three-Little-Birds/openvsp-mcp](https://github.com/Three-Little-Birds/openvsp-mcp),
-extending MCP automation for OpenVSP and VSPAERO with geometry inspection, model
-modification, and aerodynamic analysis. The original MIT license and history are retained.
+An independently maintained project by [Rhyne](https://github.com/rhyne1012) for
+OpenVSP and VSPAERO automation through MCP, Python and REST. It supports model
+discovery and editing, CAD export, geometry measurements, aerodynamic analysis,
+and resumable batch workflows.
 
 **0.10.0** adds native Clone/Flip and model-settings discovery, typed STEP/IGES
 exports, and CompGeom/Projection geometry measurements for OpenVSP **3.55.0**.
@@ -329,6 +330,17 @@ No authentication is provided; these interfaces are intended for trusted local u
 
 ## Maintenance
 
-Keep `upstream` pointing to the original project and `origin` to this fork. Use a
-small branch per reproducible issue and retain a verified environment before
-switching a daily MCP client. See [maintenance notes](docs/maintenance.md) and [LICENSE](LICENSE).
+Development, issues and releases are maintained in
+[rhyne1012/openvsp-mcp](https://github.com/rhyne1012/openvsp-mcp).
+Point `origin` to this repository. An optional `upstream` remote can track the
+original project for reference. Use a small branch per reproducible issue and
+retain a verified environment before switching a daily MCP client.
+See [maintenance notes](docs/maintenance.md) and [LICENSE](LICENSE).
+
+## Origins and acknowledgments
+
+This project began from
+[Three-Little-Birds/openvsp-mcp](https://github.com/Three-Little-Birds/openvsp-mcp).
+Its original Git history, MIT license and copyright notice are retained.
+Rhyne maintains the subsequent extensions, validation infrastructure and releases.
+OpenVSP and VSPAERO are separate upstream projects and are not bundled here.
