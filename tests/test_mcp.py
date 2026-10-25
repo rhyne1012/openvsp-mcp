@@ -27,9 +27,11 @@ def test_stdio_inspection_validation_and_error_response(tmp_path):
             ClientSession(read, write) as session,
         ):
             initialized = await session.initialize()
-            assert initialized.serverInfo.version == "0.9.0"
+            assert initialized.serverInfo.version == "0.10.0"
             tools = {t.name: t for t in (await session.list_tools()).tools}
             assert set(tools) == {
+                "openvsp.export_geometry",
+                "openvsp.geometry_analysis",
                 "openvsp.inspect",
                 "openvsp.modify",
                 "openvsp.run_vspaero",

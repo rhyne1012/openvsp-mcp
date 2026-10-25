@@ -1,7 +1,11 @@
 """OpenVSP MCP toolkit."""
 
+from .analysis_models import GeometryAnalysisRequest
 from .batch import batch_status, cancel_batch, export_batch, resume_batch, submit_batch
+from .cad import export_geometry
+from .cad_models import ExportRequest
 from .core import execute_openvsp
+from .geometry_analysis import geometry_analysis
 from .health import health_check
 from .models import (
     BatchCancelRequest,
@@ -33,6 +37,8 @@ __all__ = [
     "BatchResumeRequest",
     "BatchStatusRequest",
     "CreateModelRequest",
+    "ExportRequest",
+    "GeometryAnalysisRequest",
     "OpenVSPRequest",
     "OpenVSPResponse",
     "ParameterEditRequest",
@@ -47,6 +53,8 @@ __all__ = [
     "create_model",
     "execute_openvsp",
     "export_batch",
+    "export_geometry",
+    "geometry_analysis",
     "health_check",
     "preflight_model",
     "preview_model",

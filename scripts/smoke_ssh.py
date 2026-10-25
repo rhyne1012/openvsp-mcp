@@ -1,4 +1,4 @@
-"""Exercise all 16 tools through a local SSH launcher; all model paths are remote."""
+"""Exercise all 18 tools through a local SSH launcher; all model paths are remote."""
 
 import argparse
 import asyncio
@@ -23,7 +23,7 @@ async def exercise(args):
         ):
             evidence["initialize"] = (await session.initialize()).model_dump()
             names = {t.name for t in (await session.list_tools()).tools}
-            assert len(names) == 16
+            assert len(names) == 18
 
             async def call(name, request=None, label=None, error=False):
                 result = await session.call_tool(
@@ -74,6 +74,28 @@ async def exercise(args):
             }
             await call("preview", request)
             await call("preflight", request)
+            await call(
+                "export_geometry",
+                {
+                    "geometry_file": model,
+                    "output_dir": args.remote_output,
+                    "format": "step",
+                    "export_mode": "split_and_stitch",
+                    "length_unit": "m",
+                },
+            )
+            await call(
+                "geometry_analysis",
+                {
+                    "geometry_file": model,
+                    "output_dir": args.remote_output,
+                    "analysis": "projection",
+                    "projection_direction": "z",
+                    "length_unit": "m",
+                },
+            )
+            for kind in ("geometry", "containers", "sets", "modes", "design_variables"):
+                await call("query", {"kind": kind, "geometry_file": model}, kind)
             await call("query", {"kind": "analysis"}, "analysis")
             params = await call(
                 "query", {"kind": "parameters", "geometry_file": model, "limit": 200}, "parameters"

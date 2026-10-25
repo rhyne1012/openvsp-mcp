@@ -160,6 +160,15 @@ async def run_async(function, *args, **kwargs):
     return await _dispatch(function, args, kwargs, "native")
 
 
+async def run_bounded(function, request):
+    """Bound worker admission as well as execution for geometry-only operations."""
+    try:
+        with anyio.fail_after(request.timeout_seconds):
+            return await run_async(function, request)
+    except TimeoutError as exc:
+        raise RuntimeError("OpenVSP operation exceeded its total time budget") from exc
+
+
 async def run_read(function, *args):
     """File reads do not wait for native jobs or occupy their worker capacity."""
     return await _dispatch(function, args, {}, "read")
