@@ -17,6 +17,7 @@ from mcp.client.stdio import stdio_client
 
 from openvsp_mcp import __version__
 from openvsp_mcp.models import OpenVSPRequest, OpenVSPResponse, VSPAeroSettings
+from openvsp_mcp.native import DOCUMENTED_ANALYSIS_VERSIONS
 
 
 def digest(path: Path) -> str:
@@ -77,7 +78,7 @@ async def main() -> None:
             cached = await call("query", {"kind": "capabilities"})
             assert cached["cache_hit"]
             evidence["analysis_schema"] = await call("query", {"kind": "analysis"})
-            if health["checks"]["openvsp"]["version"] == "3.53.1":
+            if evidence["analysis_schema"]["openvsp_version"] in DOCUMENTED_ANALYSIS_VERSIONS:
                 assert evidence["analysis_schema"]["description_status"] == "available"
                 assert all(
                     isinstance(item["description"], str)

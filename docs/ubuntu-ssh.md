@@ -1,26 +1,27 @@
 # Ubuntu 24.04 and SSH stdio
 
-Validated with the official OpenVSP **3.53.1 Ubuntu 24.04 amd64** Debian package,
-VSPAERO 7.2.2, Ubuntu 24.04 x86_64 and Python 3.12.3. See
-[validation evidence](validation-ubuntu-3531.md) for exact native identities and
-the cross-platform coefficient difference. OpenVSP Python bindings are not used:
+The current local stdio target is the official OpenVSP **3.55.0 Ubuntu 24.04
+amd64** Debian package with VSPAERO 7.2.2 and Python 3.12.3. See
+[0.9 validation](validation-0.9.md) for native identities and results.
+Mac-to-Ubuntu SSH transport evidence remains the historical
+[3.53.1 validation](validation-ubuntu-3531.md); SSH was not rerun for 3.55.0. OpenVSP Python bindings are not used:
 the MCP launches `vspscript -script`, which invokes VSPAERO through the Analysis API.
 
 ## Install on Ubuntu
 
-Download the matching package from the [official archive](https://openvsp.org/download_old.php).
+Download the matching package from the [official download page](https://openvsp.org/download.php).
 For the build tested here:
 
 ```sh
 mkdir -p "$HOME/.cache/openvsp-install"
-curl -fL 'https://openvsp.org/download.php?file=zips/old/linux/OpenVSP-3.53.1-Ubuntu-24.04_amd64.deb' \
-  -o "$HOME/.cache/openvsp-install/OpenVSP-3.53.1-Ubuntu-24.04_amd64.deb"
-sha256sum "$HOME/.cache/openvsp-install/OpenVSP-3.53.1-Ubuntu-24.04_amd64.deb"
+curl -fL 'https://openvsp.org/zips/current/linux/OpenVSP-3.55.0-Ubuntu-24.04_amd64.deb' \
+  -o "$HOME/.cache/openvsp-install/OpenVSP-3.55.0-Ubuntu-24.04_amd64.deb"
+sha256sum "$HOME/.cache/openvsp-install/OpenVSP-3.55.0-Ubuntu-24.04_amd64.deb"
 # Recorded archive SHA-256:
-# 3318db7761bd7e19b21df336b8071d1607451886c7c1f87a701db63a11608242
+# 865c24f560bca8bdfd186a9c6933c4c9c016204896d7f7e0bc9ce78030337a72
 sudo apt-get update
 sudo apt-get install python3-venv git desktop-file-utils \
-  "$HOME/.cache/openvsp-install/OpenVSP-3.53.1-Ubuntu-24.04_amd64.deb"
+  "$HOME/.cache/openvsp-install/OpenVSP-3.55.0-Ubuntu-24.04_amd64.deb"
 ```
 
 Inspect any checksum difference instead of assuming the same filename is the same
@@ -38,7 +39,7 @@ export OPENVSP_BIN=/opt/OpenVSP/vspscript
 export VSPAERO_BIN=/opt/OpenVSP/vspaero
 export OPENVSP_CPU_BUDGET=4
 python3 scripts/install_local.py \
-  --package /absolute/path/openvsp_mcp-0.8.0-py3-none-any.whl \
+  --package /absolute/path/openvsp_mcp-0.9.0-py3-none-any.whl \
   --runtime-root "$HOME/.local/share/OpenVSP-MCP"
 mkdir -p "$HOME/Developer/Codex/tools"
 install -m 755 scripts/launch_linux.sh "$HOME/Developer/Codex/tools/launch-openvsp-mcp.sh"

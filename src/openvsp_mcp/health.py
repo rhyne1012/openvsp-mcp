@@ -4,13 +4,20 @@ import os
 import re
 import subprocess
 import tempfile
+import time
 from pathlib import Path
 from shutil import which
 from typing import Any
 
 from . import core
 from .native import TESTED_VERSION_PAIRS, native_identity
-from .runtime import OperationCancelled, check_cancelled, cpu_pool
+from .runtime import (
+    OperationCancelled,
+    check_cancelled,
+    cpu_allocation,
+    cpu_pool,
+    deadline_scope,
+)
 from .validation import validation_metadata
 from .version import version_info
 
@@ -49,14 +56,22 @@ def health_check() -> dict[str, Any]:
 }
 """)
                     log = Path(tmp) / "probe.log"
-                    rc = core._run_script(script, log, 15)
+                    with deadline_scope(time.monotonic() + 15), cpu_allocation(1):
+                        rc = core._run_script(script, log, 15)
                     output = log.read_text(errors="replace")
                 if rc != 0 or "OPENVSP_HEALTH_API_OK" not in output:
                     raise RuntimeError(f"API probe failed (exit {rc}): {output[-1500:]}")
             else:
-                proc = subprocess.run(
-                    [binary, "-version"], capture_output=True, text=True, timeout=10, check=False
-                )
+                deadline = time.monotonic() + 10
+                with deadline_scope(deadline), cpu_allocation(1):
+                    check_cancelled()
+                    proc = subprocess.run(
+                        [binary, "-version"],
+                        capture_output=True,
+                        text=True,
+                        timeout=max(0.001, deadline - time.monotonic()),
+                        check=False,
+                    )
                 output = proc.stdout + proc.stderr
                 # VSPAERO 7.2.2 exits 1 for its successful version-only command.
                 # Accept that exact response, never a nonzero solver execution.

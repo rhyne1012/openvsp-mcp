@@ -39,6 +39,21 @@
         "CLtot": 0.23369517898,
         "CDtot": 0.014638773132
       }
+    },
+    {
+      "platform": "Ubuntu 24.04 x86_64",
+      "system": "Linux",
+      "machine": "x86_64",
+      "distribution_id": "ubuntu",
+      "distribution_version": "24.04",
+      "openvsp_version": "3.55.0",
+      "vspaero_version": "7.2.2",
+      "openvsp_sha256": "cedb365999f2293954cbd7dbf81f7eff3e33b6a2b81d8fb9c63178035dc99afc",
+      "vspaero_sha256": "6ec1ba90757a074b9c38d15ffdad292ef6fa5280b46b59e76e93317ae15e390f",
+      "coefficients": {
+        "CLtot": 0.239303963962,
+        "CDtot": 0.014654218723
+      }
     }
   ]
 }

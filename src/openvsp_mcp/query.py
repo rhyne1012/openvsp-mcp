@@ -14,7 +14,7 @@ from . import core
 from .describe import describe_geometry
 from .models import OpenVSPRequest, ParameterEditRequest, QueryRequest
 from .native import DOCUMENTED_ANALYSIS_VERSIONS
-from .runtime import check_cancelled
+from .runtime import check_cancelled, cpu_allocation, deadline_scope
 
 _cache = {}
 _cache_lock = Lock()
@@ -132,7 +132,14 @@ def query_model(request: QueryRequest) -> dict:
         binary = Path(which(core.OPENVSP_BIN) or core.OPENVSP_BIN).resolve()
         try:
             stat = binary.stat()
-            cache_key = (str(binary), stat.st_mtime_ns, stat.st_size, stat.st_ino)
+            cache_key = (
+                str(binary),
+                stat.st_dev,
+                stat.st_ino,
+                stat.st_size,
+                stat.st_mtime_ns,
+                stat.st_ctime_ns,
+            )
         except OSError:
             pass
         with _cache_lock:
@@ -158,7 +165,8 @@ def query_model(request: QueryRequest) -> dict:
         token = uuid.uuid4().hex
         script, log = run / "query.vspscript", run / "query.log"
         script.write_text(_script(request, snapshot, token), encoding="utf-8")
-        rc = core._run_script(script, log, request.timeout_seconds)
+        with deadline_scope(started + request.timeout_seconds), cpu_allocation(1):
+            rc = core._run_script(script, log, request.timeout_seconds)
         output = log.read_text(errors="replace")
         prefix = "MCP_QUERY_" + token + ":"
         rows = [

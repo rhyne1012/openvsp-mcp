@@ -4,6 +4,14 @@ A maintained fork of [Three-Little-Birds/openvsp-mcp](https://github.com/Three-L
 extending MCP automation for OpenVSP and VSPAERO with geometry inspection, model
 modification, and aerodynamic analysis. The original MIT license and history are retained.
 
+**0.9.0** targets OpenVSP **3.55.0 / VSPAERO 7.2.2**, with an audited Ubuntu
+24.04 native build and its own coefficient baseline. Analysis descriptions now
+support the verified 3.55.0 binding. Native health/query probes share the CPU
+budget with solves, and capability caches detect executable replacements even
+when size and modification time are preserved. All 16 tools and their input
+schemas are retained. See the [API and maintenance audit](docs/api-audit-0.9.md)
+and [validation evidence](docs/validation-0.9.md).
+
 **0.8.0** validates OpenVSP 3.53.1, restores safe analysis-input descriptions,
 separates file-read/native/control admission, and reduces batch metadata I/O.
 Undefined native ratios are explicitly unavailable while finite force/moment
@@ -26,11 +34,13 @@ The [0.5 API audit](docs/api-audit-0.5.md) and existing single-case workflows re
 
 ## Install
 
-Python 3.10+ and a separate OpenVSP installation are required. Real integration
-is verified for 0.8.0 on macOS Apple Silicon with **OpenVSP 3.53.1 / VSPAERO 7.2.2**.
-Ubuntu 24.04 x86_64 with the official 3.53.1 package is also verified, including
-headless operation and Mac-to-Ubuntu SSH stdio. See [Ubuntu installation](docs/ubuntu-ssh.md)
-and [native-build validation](docs/validation-ubuntu-3531.md). Other native builds
+Python 3.10+ and a separate OpenVSP installation are required. The current native
+target is the official **OpenVSP 3.55.0 Ubuntu 24.04 x86_64 / VSPAERO 7.2.2**
+build, including headless local MCP stdio. Historical 0.8.0 validation covers
+3.53.1 on macOS Apple Silicon and Ubuntu 24.04, including Mac-to-Ubuntu SSH stdio.
+Those exact build identities and regression baselines are retained. See
+[Ubuntu installation](docs/ubuntu-ssh.md), [0.9 validation](docs/validation-0.9.md)
+and [historical native-build validation](docs/validation-ubuntu-3531.md). Other native builds
 have not been integration-tested. This pipeline
 requires the VSPAERO 7 thick/thin geometry-set interface. Binaries are not included.
 The MCP SDK is constrained to `>=1.20,<2` for the FastMCP 1.x interface.
@@ -65,6 +75,10 @@ Binary SHA-256 identities and the published validation scope are also reported.
 `tested_version_pair` checks version strings only; `tested_native_build` additionally
 requires a published platform and both audited executable hashes.
 Health is a readiness check, not a full solve or a convergence certificate.
+Native health probes wait for one shared CPU slot, within their existing 15-second
+OpenVSP and 10-second VSPAERO budgets. A saturated server can report a probe
+timeout even when its binaries are healthy. Uncached queries likewise include
+CPU admission wait in `timeout_seconds`; cached capabilities need no CPU slot.
 
 For upgrades that preserve the previously selected environment until the candidate
 passes installation and health checks, see [the local installer](docs/local-install.md).
@@ -233,6 +247,7 @@ checks actual geometry sets, rejects absent/empty/overlapping sets before solvin
 renames a wing, rejects an invalid parameter edit, runs one condition and an
 alpha 0/3 degree sweep. Full responses are saved in `smoke_outputs/smoke_result.json`;
 set `OPENVSP_SMOKE_OUTPUT` to choose a different output directory.
+For 3.55.0 the audited Ubuntu build gives CL 0.239303963962 / CD 0.014654218723.
 For 3.53.1 the audited Mac build gives CL 0.233063213237 / CD 0.014829214640;
 the audited Ubuntu build gives CL 0.233695178980 / CD 0.014638773132. Native smoke
 selects a baseline by both executable hashes, retaining the 1e-8 absolute tolerance;
@@ -252,8 +267,8 @@ Use `kind: "parameters"` with `geometry_file`; optionally select `geom_id` or
 `parm_ids`, and paginate with `offset`/`limit` (default 100, maximum 200).
 `kind: "capabilities"` lists installed analyses. Listing an analysis does not
 imply that this wrapper supports running it. Analysis input descriptions are
-enabled for the audited 3.53.0/3.53.1 binding. Older or unknown versions omit them
-without calling that binding; see the [0.8 notes](docs/runtime-0.8.md).
+enabled for the audited 3.53.0, 3.53.1 and 3.55.0 bindings. Older or unknown
+versions omit them without calling that binding; see the [API audit](docs/api-audit-0.9.md).
 
 Call `openvsp.set_parameters` with `geometry_file` and
 `edits: [{"parm_id": "ID_FROM_QUERY", "value": 1.5}]`. This operation modifies
