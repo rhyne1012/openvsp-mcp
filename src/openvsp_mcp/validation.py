@@ -23,6 +23,17 @@ VALIDATED_BUILDS = [
         "openvsp_sha256": "f86b1a785eca04d703d0fbd573f6e55d356e5cbb728d693190cd2079b4d92b12",
         "vspaero_sha256": "b8d62390a5542e3f9ff20d5accd4fd3e01efc21dba6fab945f2b780cb0738d4a",
     },
+    {
+        "platform": "Ubuntu 24.04 x86_64",
+        "system": "Linux",
+        "machine": "x86_64",
+        "distribution_id": "ubuntu",
+        "distribution_version": "24.04",
+        "openvsp_version": "3.55.0",
+        "vspaero_version": "7.2.2",
+        "openvsp_sha256": "cedb365999f2293954cbd7dbf81f7eff3e33b6a2b81d8fb9c63178035dc99afc",
+        "vspaero_sha256": "6ec1ba90757a074b9c38d15ffdad292ef6fa5280b46b59e76e93317ae15e390f",
+    },
 ]
 
 
@@ -55,8 +66,16 @@ def validation_metadata(checks, identities):
         "runtime_platform": current,
         "tested_native_build": matched,
         "validation_scope": {
-            "platform": "; ".join(build["platform"] for build in VALIDATED_BUILDS),
-            "version_pairs": [["3.53.1", "7.2.2"]],
+            "platform": "; ".join(dict.fromkeys(build["platform"] for build in VALIDATED_BUILDS)),
+            "version_pairs": [
+                list(pair)
+                for pair in sorted(
+                    {
+                        (build["openvsp_version"], build["vspaero_version"])
+                        for build in VALIDATED_BUILDS
+                    }
+                )
+            ],
             "configurations": VALIDATED_BUILDS,
             "meaning": (
                 "Published native workflow evidence. tested_version_pair checks version strings "

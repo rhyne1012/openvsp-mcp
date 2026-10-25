@@ -5,9 +5,13 @@ from functools import lru_cache
 from pathlib import Path
 from shutil import which
 
+from .validation import VALIDATED_BUILDS
+
 # Do not call the broken string-return binding on older/unknown builds.
-DOCUMENTED_ANALYSIS_VERSIONS = {"OpenVSP 3.53.0", "OpenVSP 3.53.1"}
-TESTED_VERSION_PAIRS = {("3.53.1", "7.2.2")}
+DOCUMENTED_ANALYSIS_VERSIONS = {"OpenVSP 3.53.0", "OpenVSP 3.53.1", "OpenVSP 3.55.0"}
+TESTED_VERSION_PAIRS = {
+    (build["openvsp_version"], build["vspaero_version"]) for build in VALIDATED_BUILDS
+}
 
 
 def digest_file(path):

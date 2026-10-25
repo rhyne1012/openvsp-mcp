@@ -388,7 +388,7 @@ class QueryRequest(BaseModel):
         30,
         ge=1,
         le=120,
-        description="Native query-process timeout in seconds (default 30). Model-free capability cache hits do not launch OpenVSP; temporary files are removed after the query.",
+        description="Native query budget in seconds (default 30), including preparation and waiting for the shared CPU budget. Model-free capability cache hits do not launch OpenVSP; temporary files are removed after the query.",
     )
 
     @model_validator(mode="after")

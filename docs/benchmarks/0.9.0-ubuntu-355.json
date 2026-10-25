@@ -1,0 +1,116 @@
+{
+  "date": "2026-10-25",
+  "scope": "Native workflow regression only; no aerodynamic accuracy or convergence claim.",
+  "package_version": "0.9.0",
+  "python_version": "3.12.3",
+  "mcp_sdk_version": "1.30.0",
+  "runtime_platform": {
+    "system": "Linux",
+    "machine": "x86_64",
+    "distribution_id": "ubuntu",
+    "distribution_version": "24.04"
+  },
+  "archive_sha256": "865c24f560bca8bdfd186a9c6933c4c9c016204896d7f7e0bc9ce78030337a72",
+  "native": {
+    "openvsp": {
+      "version": "3.55.0",
+      "sha256": "cedb365999f2293954cbd7dbf81f7eff3e33b6a2b81d8fb9c63178035dc99afc"
+    },
+    "vspaero": {
+      "version": "7.2.2",
+      "sha256": "6ec1ba90757a074b9c38d15ffdad292ef6fa5280b46b59e76e93317ae15e390f"
+    }
+  },
+  "repeatability": [
+    {
+      "CLtot": 0.239303963962,
+      "CDtot": 0.014654218723
+    },
+    {
+      "CLtot": 0.239303963962,
+      "CDtot": 0.014654218723
+    }
+  ],
+  "legacy_mcp_stdio": {
+    "status": "PASS",
+    "tools": [
+      "openvsp.batch_cancel",
+      "openvsp.batch_export",
+      "openvsp.batch_resume",
+      "openvsp.batch_status",
+      "openvsp.batch_submit",
+      "openvsp.create_model",
+      "openvsp.health",
+      "openvsp.inspect",
+      "openvsp.modify",
+      "openvsp.preflight",
+      "openvsp.preview",
+      "openvsp.query",
+      "openvsp.read_results",
+      "openvsp.run_vspaero",
+      "openvsp.set_parameters",
+      "openvsp.sweep"
+    ],
+    "checks": [
+      "source preserved",
+      "modify saved",
+      "API error rejected",
+      "native capability cache and analysis inputs",
+      "parameter query, edit/readback and rejected invalid edits",
+      "absent/empty/overlapping sets rejected before solver",
+      "VSPAERO solve",
+      "fixed wake and GMRES solver input verified",
+      "saved result read without solver rerun",
+      "two-point sweep"
+    ],
+    "CL": 0.239303963962,
+    "CD": 0.014654218723
+  },
+  "sweep": [
+    {
+      "alpha": 0.0,
+      "CLtot": -0.00979849447,
+      "CDtot": 0.014713219576
+    },
+    {
+      "alpha": 3.0,
+      "CLtot": 0.239303963962,
+      "CDtot": 0.014654218723
+    }
+  ],
+  "batch_mcp_stdio": {
+    "status": "PASS",
+    "models": [
+      "conventional_aircraft",
+      "rectangular_wing"
+    ],
+    "checks": [
+      "parallel native solves",
+      "private per-case parameter edits",
+      "cancel queued case",
+      "resume reuses successes",
+      "CSV/JSON export",
+      "bad parameter rejection",
+      "zero-lift forces with explicitly unavailable efficiency",
+      "source preservation"
+    ]
+  },
+  "automated_tests": {
+    "passed": 154,
+    "warnings": 1,
+    "warning": "Starlette TestClient httpx deprecation",
+    "ruff": "PASS",
+    "tool_contracts": 16
+  },
+  "installed_wheel": {
+    "sha256": "ae3aa1781c65e01183b3e4e18e310afe2fdabf173325c707da68be1b416c7f90",
+    "package_sha256": "63069b0a53229838ee05adad13d2406ff2ded6e340c15647c2a7f813172c3596",
+    "health": "ok",
+    "tested_version_pair": true,
+    "tested_native_build": true,
+    "isolated_stdio_and_query": "PASS",
+    "rest_health": 200,
+    "dependency_check": "PASS",
+    "installed_distributions": 33
+  }
+}

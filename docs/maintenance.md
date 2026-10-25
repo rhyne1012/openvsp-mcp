@@ -1,3 +1,22 @@
+# OpenVSP 3.55.0 compatibility and MCP health (0.9.0)
+
+- Audit the tagged native API and enable analysis descriptions for exactly 3.55.0.
+- Add a separately validated Ubuntu 24.04 build and coefficient baseline without
+  changing the existing 1e-8 absolute regression tolerance.
+- Apply shared CPU admission and bounded queue waits to native metadata/health
+  probes; leave capability cache hits free of native resource acquisition.
+- Include device and change time in capability cache identity; derive supported
+  version pairs from the build registry to prevent matrix drift.
+- Preserve the 16 public tools, schema contracts and supported REST dependencies.
+  Modernize MIT license packaging metadata to eliminate the deprecated TOML table.
+
+See [source/API audit](api-audit-0.9.md) and [validation](validation-0.9.md).
+Installing a different package changes its fingerprint: finish or resume existing
+batches with their original runtime. This source update does not switch an active
+runtime, edit MCP client registration, delete old releases, or create a GitHub Release.
+
+---
+
 # Tool metadata and schema documentation (0.7.0)
 
 - Expand descriptions for the existing 16 tools with selection guidance, side
