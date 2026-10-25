@@ -1,6 +1,7 @@
 """Metadata may improve while the published 0.6 input/output contract stays fixed."""
 
 import asyncio
+import copy
 import hashlib
 import json
 from pathlib import Path
@@ -37,9 +38,29 @@ def test_existing_tool_names_and_input_output_contracts_are_unchanged():
         (Path(__file__).parent / "fixtures" / "tool_contract_0_6.json").read_text()
     )["tools"]
     tools = tool_catalog()
-    assert len(tools) == len(baseline) == 16
-    assert {tool.name for tool in tools} == set(baseline)
+    assert len(tools) == 18
+    assert {tool.name for tool in tools} == set(baseline) | {
+        "openvsp.export_geometry",
+        "openvsp.geometry_analysis",
+    }
     for tool in tools:
+        if tool.name not in baseline:
+            continue
+        if tool.name == "openvsp.query":
+            # Remove only additive 0.10 selectors/kinds; keep every legacy field constraint.
+            legacy = copy.deepcopy(tool.inputSchema)
+            properties = legacy["$defs"]["QueryRequest"]["properties"]
+            for name in (
+                "container_id",
+                "container_name",
+                "container_index",
+                "design_variables_file",
+            ):
+                properties.pop(name)
+            properties["kind"]["enum"] = ["capabilities", "analysis", "parameters"]
+            assert contract_digest(legacy) == baseline[tool.name]["input_sha256"]
+            assert contract_digest(tool.outputSchema) == baseline[tool.name]["output_sha256"]
+            continue
         assert contract_digest(tool.inputSchema) == baseline[tool.name]["input_sha256"], tool.name
         assert contract_digest(tool.outputSchema) == baseline[tool.name]["output_sha256"], tool.name
 

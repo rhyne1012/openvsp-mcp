@@ -6,9 +6,13 @@ from mcp.server.fastmcp import FastMCP
 from mcp.types import ToolAnnotations
 from pydantic import Field
 
+from .analysis_models import GeometryAnalysisRequest
 from .batch import batch_status, cancel_batch, export_batch, resume_batch, submit_batch
+from .cad import export_geometry
+from .cad_models import ExportRequest
 from .core import execute_openvsp
 from .describe import describe_geometry
+from .geometry_analysis import geometry_analysis
 from .health import health_check
 from .models import (
     BatchCancelRequest,
@@ -28,11 +32,47 @@ from .models import (
 )
 from .query import query_model, set_parameters
 from .results import read_results
-from .runtime import run_async, run_control, run_read
+from .runtime import run_async, run_bounded, run_control, run_read
 from .workflows import create_model, preflight_model, preview_model, run_sweep
 
 
 def build_tool(app: FastMCP) -> None:
+    @app.tool(
+        name="openvsp.export_geometry",
+        description=(
+            "Export STEP or IGES from a private model snapshot using standard or split-and-stitch "
+            "export. Requires an explicit source length unit; optionally select a set or mode. "
+            "Retains CAD, script, log and manifest. Checks file structure and unit metadata; "
+            "does not certify closed solids or fuse intersecting components."
+        ),
+        annotations=ToolAnnotations(
+            readOnlyHint=False, destructiveHint=False, idempotentHint=False, openWorldHint=False
+        ),
+    )
+    async def export_cad(
+        request: Annotated[ExportRequest, Field(description="CAD format, units and selection.")],
+    ) -> dict[str, Any]:
+        return await run_bounded(export_geometry, request)
+
+    @app.tool(
+        name="openvsp.geometry_analysis",
+        description=(
+            "Measure a model with CompGeom wetted areas/volumes or Projection silhouette areas. "
+            "Runs on a private snapshot with an explicit source length unit and optional set/mode. "
+            "Retains raw Results JSON/CSV, script, log and manifest; reports tessellated geometry "
+            "measurements and units, without running an aerodynamic solver."
+        ),
+        annotations=ToolAnnotations(
+            readOnlyHint=False, destructiveHint=False, idempotentHint=False, openWorldHint=False
+        ),
+    )
+    async def measure(
+        request: Annotated[
+            GeometryAnalysisRequest, Field(description="Geometry measurement and selection.")
+        ],
+    ) -> dict[str, Any]:
+        return await run_bounded(geometry_analysis, request)
+
     @app.tool(
         name="openvsp.health",
         description=(
@@ -191,12 +231,13 @@ def build_tool(app: FastMCP) -> None:
     @app.tool(
         name="openvsp.query",
         description=(
-            "List installed analyses, read analysis input types/defaults, or read paginated "
-            "geometry parameter IDs, values and limits. Launches OpenVSP using temporary "
+            "Discover analyses/defaults, geometry Clone/Flip relationships, containers and "
+            "parameters, sets, modes or design variables. Launches OpenVSP using temporary "
             "files and an optional model snapshot, preserving the source; model-free "
             "capability lists may use a five-minute cache. Native defaults may depend on "
             "the model and do not imply wrapper execution support; use openvsp.inspect "
-            "for XML-only inspection and openvsp.set_parameters to apply returned IDs."
+            "for XML-only inspection. Design variables require a separate .xddm/.des file. "
+            "Use openvsp.set_parameters to apply returned persistent parameter IDs."
         ),
         annotations=ToolAnnotations(
             readOnlyHint=False, destructiveHint=False, idempotentHint=False, openWorldHint=False

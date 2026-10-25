@@ -4,6 +4,12 @@ A maintained fork of [Three-Little-Birds/openvsp-mcp](https://github.com/Three-L
 extending MCP automation for OpenVSP and VSPAERO with geometry inspection, model
 modification, and aerodynamic analysis. The original MIT license and history are retained.
 
+**0.10.0** adds native Clone/Flip and model-settings discovery, typed STEP/IGES
+exports, and CompGeom/Projection geometry measurements for OpenVSP **3.55.0**.
+There are now 18 tools: the existing 16 remain, `query` gains additive selectors,
+and two tools operate on private model snapshots with retained evidence.
+See [geometry workflows and validation](docs/geometry-0.10.md).
+
 **0.9.0** targets OpenVSP **3.55.0 / VSPAERO 7.2.2**, with an audited Ubuntu
 24.04 native build and its own coefficient baseline. Analysis descriptions now
 support the verified 3.55.0 binding. Native health/query probes share the CPU
@@ -103,6 +109,8 @@ preserving a source model does not mean an operation writes no files.
 | `openvsp.preflight` | Check selected geometry sets in the loaded model and report reference/unit warnings; no solver. |
 | `openvsp.run_vspaero` | Prepare and solve one condition; validate artifacts and matching polar; preserve source. |
 | `openvsp.query` | Discover analyses, inspect their input types/defaults, or read paginated geometry parameters. |
+| `openvsp.export_geometry` | Export STEP/IGES with explicit units, set or mode selection, and standard or split-and-stitch output. |
+| `openvsp.geometry_analysis` | Measure wetted area/volume with CompGeom or projected union area with Projection. |
 | `openvsp.set_parameters` | Apply typed ID/value edits in one load/update; verify limits and final readback before replacing the source. |
 | `openvsp.read_results` | Read saved coefficient subsets and bounded log tails without launching OpenVSP. |
 | `openvsp.sweep` | Solve 1–25 explicitly specified conditions sequentially; retain partial results on failure. |
@@ -300,6 +308,8 @@ Python exports include `CreateModelRequest`, `SweepRequest`, `OpenVSPRequest`,
 `VSPAeroSettings`, `create_model`, `preview_model`, `preflight_model`, `run_sweep`,
 `health_check`, `execute_openvsp`, `QueryRequest`, `ParameterEditRequest`,
 `ResultRequest`, `query_model`, `set_parameters` and `read_results`.
+Geometry workflows also export `ExportRequest`, `GeometryAnalysisRequest`,
+`export_geometry` and `geometry_analysis`.
 
 HTTP MCP binds to loopback by default:
 
@@ -311,6 +321,7 @@ python -m uvicorn openvsp_mcp.fastapi_app:create_app --factory --host 127.0.0.1 
 REST exposes `GET /health` (200 ready, 503 unhealthy) and `POST /vsp/inspect`,
 `/vsp/create`, `/vsp/modify`, `/vsp/preview`, `/vsp/preflight`, `/vsp/run`, and
 `/vsp/sweep`, `/vsp/query`, `/vsp/parameters`, and `/vsp/results`.
+Geometry routes are `POST /vsp/export` and `/vsp/geometry-analysis`.
 Batch routes are `POST /vsp/batch/submit`, `/vsp/batch/status`, `/vsp/batch/cancel`,
 `/vsp/batch/resume` and `/vsp/batch/export`.
 POST bodies contain the request object without the MCP wrapper.

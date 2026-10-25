@@ -352,13 +352,22 @@ class ParameterEditRequest(BaseModel):
 
 class QueryRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
-    kind: Literal["capabilities", "analysis", "parameters"] = Field(
+    kind: Literal[
         "capabilities",
-        description="capabilities lists installed analyses; analysis reads native input types/defaults; parameters reads paginated parameter IDs/values/limits and requires geometry_file.",
+        "analysis",
+        "parameters",
+        "geometry",
+        "containers",
+        "sets",
+        "modes",
+        "design_variables",
+    ] = Field(
+        "capabilities",
+        description="capabilities lists installed analyses; analysis reads native defaults; geometry discovers hierarchy, Clone/Flip and surfaces; containers discovers model settings; parameters reads values/native limits; sets, modes and design_variables discover model configuration. All except capabilities/analysis require geometry_file.",
     )
     geometry_file: str | None = Field(
         None,
-        description="Optional existing .vsp3 path copied to a temporary model; required for parameters. Without a model, analysis defaults come from an empty model; tilde and relative paths resolve on the server.",
+        description="Existing .vsp3 path copied to a temporary model; required for model discovery. Without a model, analysis defaults come from an empty model; tilde and relative paths resolve on the server. Sources are never rewritten.",
     )
     analysis_name: str = Field(
         "VSPAEROSweep",
@@ -366,35 +375,80 @@ class QueryRequest(BaseModel):
     )
     geom_id: str | None = Field(
         None,
-        description="For kind=parameters, optionally select one geometry component when parm_ids is empty. Ignored when explicit parm_ids are supplied.",
+        description="For kind=geometry or parameters, optionally select one geometry component. Ignored when explicit parm_ids are supplied; cannot be combined with container selectors.",
+    )
+    container_id: str | None = Field(
+        None,
+        min_length=1,
+        description="For kind=containers or parameters, select a native parameter container ID returned by containers. Cannot be combined with geom_id or parm_ids.",
+    )
+    container_name: str | None = Field(
+        None,
+        min_length=1,
+        description="For kind=containers or parameters, select a container by exact name and container_index. Use this for containers whose IDs are regenerated on every load, such as UserParms. Mutually exclusive with container_id, geom_id and parm_ids.",
+    )
+    container_index: int = Field(
+        0,
+        ge=0,
+        description="Zero-based occurrence of container_name (default 0); only valid with container_name. Obtain name_index from containers results.",
     )
     parm_ids: list[str] = Field(
         default_factory=list,
         max_length=200,
-        description="Explicit parameter IDs for kind=parameters; defaults to enumeration from geom_id or all components. Takes precedence over geom_id; offset/limit also apply to this list.",
+        description="Explicit parameter IDs for kind=parameters; defaults to enumeration from the selected geom_id/container_id or all components. Takes precedence over geom_id; cannot be combined with container selectors. Offset/limit also apply to this list.",
+    )
+    design_variables_file: str | None = Field(
+        None,
+        description="For kind=design_variables only, optional .xddm or .des file loaded into the temporary model. OpenVSP does not store design-variable membership in .vsp3. XDDM and modern DES user bounds are reported separately from native Parm limits; legacy files without bounds use native defaults. Input structure, values and IDs are validated before native import.",
     )
     offset: int = Field(
         0,
         ge=0,
-        description="Zero-based offset into parameter results (default 0); used only for kind=parameters.",
+        description="Zero-based result offset for model-discovery queries (default 0). Does not paginate capabilities or analysis inputs.",
     )
     limit: int = Field(
         100,
         ge=1,
         le=200,
-        description="Maximum parameter entries returned, 1-200 (default 100); used only for kind=parameters.",
+        description="Maximum model-discovery entries returned, 1-200 (default 100). Does not paginate capabilities or analysis inputs.",
     )
     timeout_seconds: int = Field(
         30,
         ge=1,
         le=120,
-        description="Native query budget in seconds (default 30), including preparation and waiting for the shared CPU budget. Model-free capability cache hits do not launch OpenVSP; temporary files are removed after the query.",
+        description="Native query budget in seconds (default 30), including preparation, capability probing and waiting for the shared CPU budget. Model-free capability cache hits do not launch OpenVSP; temporary files are removed after the query.",
     )
 
     @model_validator(mode="after")
     def parameter_source(self):
-        if self.kind == "parameters" and not self.geometry_file:
-            raise ValueError("Parameter queries require geometry_file")
+        if self.kind not in {"capabilities", "analysis"} and not self.geometry_file:
+            raise ValueError(f"{self.kind} queries require geometry_file")
+        if self.geom_id is not None and self.kind not in {"geometry", "parameters"}:
+            raise ValueError("geom_id is only valid for geometry or parameters queries")
+        if self.container_id is not None and self.kind not in {"containers", "parameters"}:
+            raise ValueError("container_id is only valid for containers or parameters queries")
+        if self.container_name is not None and self.kind not in {"containers", "parameters"}:
+            raise ValueError("container_name is only valid for containers or parameters queries")
+        if self.container_name is None and self.container_index:
+            raise ValueError("container_index requires container_name")
+        if self.parm_ids and self.kind != "parameters":
+            raise ValueError("parm_ids is only valid for parameters queries")
+        if (
+            (self.container_id is not None or self.container_name is not None)
+            and (self.geom_id is not None or self.parm_ids)
+            or self.container_id is not None
+            and self.container_name is not None
+        ):
+            raise ValueError(
+                "Container selectors are mutually exclusive with each other, geom_id and parm_ids"
+            )
+        if any(not parm.strip() for parm in self.parm_ids):
+            raise ValueError("parm_ids must not contain empty IDs")
+        if self.design_variables_file is not None:
+            if self.kind != "design_variables":
+                raise ValueError("design_variables_file is only valid for design_variables queries")
+            if not self.design_variables_file.lower().endswith((".xddm", ".des")):
+                raise ValueError("design_variables_file must be an .xddm or .des file")
         return self
 
 

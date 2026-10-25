@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from fastapi import FastAPI, HTTPException, Response
 
+from .analysis_models import GeometryAnalysisRequest
 from .batch import (
     batch_lifespan,
     batch_status,
@@ -12,8 +13,11 @@ from .batch import (
     resume_batch,
     submit_batch,
 )
+from .cad import export_geometry
+from .cad_models import ExportRequest
 from .core import execute_openvsp
 from .describe import describe_geometry
+from .geometry_analysis import geometry_analysis
 from .health import health_check
 from .models import (
     BatchCancelRequest,
@@ -31,9 +35,10 @@ from .models import (
     ResultRequest,
     SweepRequest,
 )
+from .operations import NativeOperationError
 from .query import query_model, set_parameters
 from .results import read_results
-from .runtime import run_async, run_control, run_read
+from .runtime import run_async, run_bounded, run_control, run_read
 from .version import __version__
 from .workflows import create_model, preflight_model, preview_model, run_sweep
 
@@ -45,6 +50,24 @@ def create_app() -> FastAPI:
         description="Inspect and automate OpenVSP geometry edits, with optional VSPAero runs.",
         lifespan=batch_lifespan,
     )
+
+    @app.post("/vsp/export")
+    async def export_cad(request: ExportRequest) -> dict:
+        try:
+            return await run_bounded(export_geometry, request)
+        except NativeOperationError as exc:
+            raise HTTPException(status_code=500, detail=exc.details) from exc
+        except RuntimeError as exc:
+            raise HTTPException(status_code=500, detail=str(exc)) from exc
+
+    @app.post("/vsp/geometry-analysis")
+    async def measure(request: GeometryAnalysisRequest) -> dict:
+        try:
+            return await run_bounded(geometry_analysis, request)
+        except NativeOperationError as exc:
+            raise HTTPException(status_code=500, detail=exc.details) from exc
+        except RuntimeError as exc:
+            raise HTTPException(status_code=500, detail=str(exc)) from exc
 
     @app.post("/vsp/inspect", response_model=OpenVSPInspectResponse)
     async def inspect(request: OpenVSPGeometryRequest) -> OpenVSPInspectResponse:
