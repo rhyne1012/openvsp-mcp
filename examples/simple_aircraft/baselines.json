@@ -54,6 +54,19 @@
         "CLtot": 0.239303963962,
         "CDtot": 0.014654218723
       }
+    },
+    {
+      "platform": "macOS arm64",
+      "system": "Darwin",
+      "machine": "arm64",
+      "openvsp_version": "3.55.0",
+      "vspaero_version": "7.2.2",
+      "openvsp_sha256": "ff189b1b2a8f2c0bb15c539de1d051289c8e4674b6cff43aae7e191e52964015",
+      "vspaero_sha256": "0c9e59403d1b8e15e4b7b72b4f24dae4908e0621a1411f714c0110c4215e7c00",
+      "coefficients": {
+        "CLtot": 0.238537638256,
+        "CDtot": 0.014837771179
+      }
     }
   ]
 }

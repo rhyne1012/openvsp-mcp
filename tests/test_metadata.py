@@ -4,6 +4,7 @@ import asyncio
 import copy
 import hashlib
 import json
+import re
 from pathlib import Path
 
 from mcp.server.fastmcp import FastMCP
@@ -63,6 +64,13 @@ def test_existing_tool_names_and_input_output_contracts_are_unchanged():
             continue
         assert contract_digest(tool.inputSchema) == baseline[tool.name]["input_sha256"], tool.name
         assert contract_digest(tool.outputSchema) == baseline[tool.name]["output_sha256"], tool.name
+
+
+def test_native_smoke_expects_the_published_catalog():
+    # Hosted CI has no native binaries, so the smoke's own exact check cannot catch drift.
+    source = (Path(__file__).parents[1] / "examples/simple_aircraft/run_smoke.py").read_text()
+    names = re.findall(r'"(\w+)"', source.split("for name in [", 1)[1].split("]", 1)[0])
+    assert {"openvsp." + name for name in names} == {tool.name for tool in tool_catalog()}
 
 
 def test_nested_parameters_and_existing_output_fields_are_documented():
