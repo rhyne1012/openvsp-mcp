@@ -43,7 +43,9 @@ The [0.5 API audit](docs/api-audit-0.5.md) and existing single-case workflows re
 
 Python 3.10+ and a separate OpenVSP installation are required. The current native
 target is the official **OpenVSP 3.55.0 Ubuntu 24.04 x86_64 / VSPAERO 7.2.2**
-build, including headless local MCP stdio. Historical 0.8.0 validation covers
+build, including headless local MCP stdio. The official macOS ARM64 3.55.0 build
+has its own identity and baseline; see [macOS validation](docs/validation-macos-355.md).
+Historical 0.8.0 validation covers
 3.53.1 on macOS Apple Silicon and Ubuntu 24.04, including Mac-to-Ubuntu SSH stdio.
 Those exact build identities and regression baselines are retained. See
 [Ubuntu installation](docs/ubuntu-ssh.md), [0.9 validation](docs/validation-0.9.md)
@@ -256,7 +258,8 @@ checks actual geometry sets, rejects absent/empty/overlapping sets before solvin
 renames a wing, rejects an invalid parameter edit, runs one condition and an
 alpha 0/3 degree sweep. Full responses are saved in `smoke_outputs/smoke_result.json`;
 set `OPENVSP_SMOKE_OUTPUT` to choose a different output directory.
-For 3.55.0 the audited Ubuntu build gives CL 0.239303963962 / CD 0.014654218723.
+For 3.55.0 the audited Ubuntu build gives CL 0.239303963962 / CD 0.014654218723;
+the audited Mac build gives CL 0.238537638256 / CD 0.014837771179.
 For 3.53.1 the audited Mac build gives CL 0.233063213237 / CD 0.014829214640;
 the audited Ubuntu build gives CL 0.233695178980 / CD 0.014638773132. Native smoke
 selects a baseline by both executable hashes, retaining the 1e-8 absolute tolerance;

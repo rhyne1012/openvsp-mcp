@@ -1,4 +1,4 @@
-"""Exercise the eleven legacy tools; batch_smoke.py covers the five batch tools."""
+"""Exercise the eleven legacy tools; batch_smoke.py and smoke_geometry.py cover the others."""
 
 from __future__ import annotations
 
@@ -58,6 +58,8 @@ async def main() -> None:
                     "batch_cancel",
                     "batch_resume",
                     "batch_export",
+                    "export_geometry",
+                    "geometry_analysis",
                 ]
             }
 

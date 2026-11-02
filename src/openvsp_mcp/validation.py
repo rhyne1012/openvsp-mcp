@@ -34,6 +34,15 @@ VALIDATED_BUILDS = [
         "openvsp_sha256": "cedb365999f2293954cbd7dbf81f7eff3e33b6a2b81d8fb9c63178035dc99afc",
         "vspaero_sha256": "6ec1ba90757a074b9c38d15ffdad292ef6fa5280b46b59e76e93317ae15e390f",
     },
+    {
+        "platform": "macOS arm64",
+        "system": "Darwin",
+        "machine": "arm64",
+        "openvsp_version": "3.55.0",
+        "vspaero_version": "7.2.2",
+        "openvsp_sha256": "ff189b1b2a8f2c0bb15c539de1d051289c8e4674b6cff43aae7e191e52964015",
+        "vspaero_sha256": "0c9e59403d1b8e15e4b7b72b4f24dae4908e0621a1411f714c0110c4215e7c00",
+    },
 ]
 
 
